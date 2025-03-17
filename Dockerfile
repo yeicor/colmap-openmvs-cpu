@@ -9,18 +9,16 @@ COPY colmap colmap
 RUN cd colmap && mkdir build && cd build && cmake .. -GNinja && ninja && ninja install
 
 # Copy and build openmvs git submodule
-COPY openmvs openmvs
-RUN cd openmvs && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=./vcglib .. && cmake --build . -j$(nproc) && cmake --install .
-ENV PATH /usr/local/bin/OpenMVS:$PATH
+COPY VCG VCG
+COPY openMVS openMVS
+RUN cd openMVS && mkdir cmake && cd cmake && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=../../VCG .. && cmake --build . -j$(nproc) && cmake --install .
+ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
 # Create and switch to a custom user
-ARG UID 1000
-ARG GID 1000
-RUN groupadd -g $GID group && \
-    useradd -m -u $UID -g group user
-USER user
-WORKDIR /home/user
+RUN useradd -d /home/myuser -m myuser
+WORKDIR /home/myuser
 
 # Set entrypoint
 COPY entrypoint.sh entrypoint.sh
-ENTRYPOINT entrypoint.sh
+RUN chmod u+x entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]

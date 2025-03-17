@@ -1,0 +1,9 @@
+[submodule "colmap"]
+	path = colmap
+	url = https://github.com/colmap/colmap
+[submodule "openMVS"]
+	path = openMVS
+	url = https://github.com/cdcseacave/openMVS
+[submodule "VCG"]
+	path = VCG
+	url = https://github.com/cdcseacave/VCG
