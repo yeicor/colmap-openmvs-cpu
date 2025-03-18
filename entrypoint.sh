@@ -10,17 +10,20 @@ if [ -z "$obj" ]; then
 fi
 
 cd "$obj"
+mkdir -p colmap
+pushd colmap
 if [ ! -d "colmap/dense/0" ] || [ ! -z "$force_colmap" ]; then
-    mkdir -p "colmap"
-    colmap automatic_reconstructor --image_path "../images" --workspace_path . --quality extreme --camera_model OPENCV --single_camera=1 --use_gpu=0 || true
+    colmap automatic_reconstructor --image_path ../images --workspace_path . --quality extreme --camera_model OPENCV --single_camera=1 --use_gpu=0 || true
     if [ ! -d "colmap/dense/0" ]; then
         echo "Colmap failed to create at least one dense reconstruction folder"
         exit 1
     fi
 fi
+popd
 
+mkdir -p openmvs
+pushd openmvs
 if [ ! -f "openmvs/scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
-    mkdir -p "openmvs"
     InterfaceCOLMAP -i ../colmap/dense/0 -o scene.mvs && ReconstructMesh scene.mvs
 fi
 
@@ -39,6 +42,7 @@ fi
 if [ ! -f "openmvs/scene_dense_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh_refined" ]; then
     RefineMesh -i scene_dense.mvs -m scene_dense_mesh.ply -o scene_dense_mesh_refined.ply && TextureMesh -i scene_dense.mvs -m scene_dense_mesh_refined.ply -o scene_dense_mesh_refined_textured.obj
 fi
+popd
 
 echo "Finished succesfully!"
 
