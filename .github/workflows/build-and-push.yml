@@ -5,9 +5,6 @@ on:
   push:
   pull_request:
 
-env:
-  DOCKER_IMAGE_NAME: "$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')"
-
 jobs:
   build-and-push:
     runs-on: "ubuntu-latest"
@@ -17,8 +14,9 @@ jobs:
           submodules: "recursive"
 
       - run: |
+          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           IMAGE_DATE="$(date +'%Y-%m-%d')"
-          git submodule update --init --recursive
+          git submodule foreach --recursive 'git fetch --tags'
           COLMAP_DESC="$(git -C colmap describe --tags || echo "unknown")"
           OPENMVS_DESC="$(git -C openMVS describe --tags || echo "unknown")"
           echo "IMAGE_TAG=${IMAGE_DATE}-colmap-${COLMAP_VERSION}-openmvs-${OPENMVS_VERSION}" >> $GITHUB_ENV
