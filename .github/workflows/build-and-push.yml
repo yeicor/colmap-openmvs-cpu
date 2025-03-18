@@ -7,7 +7,7 @@ on:
 
 env:
   DOCKER_USERNAME: "${{ github.actor }}"
-  DOCKER_IMAGE_NAME: "${{ env.DOCKER_USERNAME }}/$(basename ${{ github.repository }})"
+  DOCKER_IMAGE_NAME: "${{ github.actor }}/$(basename ${{ github.repository }})"
 
 jobs:
   build-and-push:
@@ -39,6 +39,6 @@ jobs:
           tags: |
             ${{ env.DOCKER_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ env.DOCKER_IMAGE_NAME }}:latest
-          cache-from: "type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache"
-          cache-to: "type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max"
+          cache-from: "type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache"
+          cache-to: "type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:buildcache,mode=max"
 
