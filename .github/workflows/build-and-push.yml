@@ -16,7 +16,7 @@ jobs:
       - run: |
           echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           IMAGE_DATE="$(date +'%Y-%m-%d')"
-          git submodule foreach --recursive 'git fetch --tags'
+          git submodule foreach --recursive 'git fetch --unshallow --tags'
           COLMAP_DESC="$(git -C colmap describe --tags || echo "unknown")"
           OPENMVS_DESC="$(git -C openMVS describe --tags || echo "unknown")"
           echo "IMAGE_TAG=${IMAGE_DATE}-colmap-${COLMAP_VERSION}-openmvs-${OPENMVS_VERSION}" >> $GITHUB_ENV
