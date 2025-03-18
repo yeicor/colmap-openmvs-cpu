@@ -16,10 +16,9 @@ jobs:
       - run: |
           echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           IMAGE_DATE="$(date +'%Y-%m-%d')"
-          git submodule foreach --recursive 'git fetch --unshallow --tags'
           COLMAP_DESC="$(git -C colmap tag --list --sort=-authordate | head -n 1)-$(git -C colmap rev-parse --short HEAD)"
           OPENMVS_DESC="$(git -C openMVS tag --list --sort=-authordate | head -n 1)-$(git -C openMVS rev-parse --short HEAD)"
-          echo "IMAGE_TAG=${IMAGE_DATE}-colmap-${COLMAP_VERSION}-openmvs-${OPENMVS_VERSION}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${IMAGE_DATE}-colmap-${COLMAP_DESC}-openmvs-${OPENMVS_DESC}" >> $GITHUB_ENV
           
       - uses: "docker/setup-buildx-action@v3"
 
