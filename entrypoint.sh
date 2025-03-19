@@ -12,22 +12,24 @@ fi
 cd "$obj"
 mkdir -p colmap
 pushd colmap
-if [ ! -d "sparse" ] || [ ! -z "$force_colmap" ]; then
-    colmap automatic_reconstructor --image_path ../images --workspace_path . --quality extreme --camera_model OPENCV --single_camera=1 --use_gpu=0 $COLMAP_ARGS || echo "Colmap exited with non-zero code $? (this is probably expected)"
-    if [ ! -d "sparse" ]; then
+if [ ! -d "sparse/0" ] || [ ! -z "$force_colmap" ]; then
+    colmap automatic_reconstructor --image_path ../images --workspace_path . --quality extreme --camera_model OPENCV --single_camera=1 --use_gpu=0 $COLMAP_ARGS $automatic_reconstructor_ARGS || echo "Colmap exited with non-zero code $? (this is probably expected)"
+    if [ ! -d "sparse/0" ]; then
         echo "Colmap failed to create at least one sparse reconstruction folder"
         exit 1
     fi
-    if [ -d "sparse/0" ]; then
-        cp "sparse/0/"* "sparse"
-    fi
+fi
+
+if [ ! -d "dense" ] || [ ! -z "$force_colmap" ]; then
+    mkdir dense
+    colmap image_undistorter --image_path ../images --input_path sparse/0 --output_path dense --output_type COLMAP --max_image_size 4096 $COLMAP_ARGS $image_undistorter_ARGS
 fi
 popd
 
 mkdir -p openmvs
 pushd openmvs
 if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
-    InterfaceCOLMAP -i ../colmap -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
+    InterfaceCOLMAP -i ../colmap/dense -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
     ReconstructMesh scene.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS
 fi
 
