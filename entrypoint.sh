@@ -12,11 +12,14 @@ fi
 cd "$obj"
 mkdir -p colmap
 pushd colmap
-if [ ! -d "sparse/0" ] || [ ! -z "$force_colmap" ]; then
+if [ ! -d "sparse" ] || [ ! -z "$force_colmap" ]; then
     colmap automatic_reconstructor --image_path ../images --workspace_path . --quality extreme --camera_model OPENCV --single_camera=1 --use_gpu=0 $COLMAP_ARGS || echo "Colmap exited with non-zero code $? (this is probably expected)"
-    if [ ! -d "sparse/0" ]; then
+    if [ ! -d "sparse" ]; then
         echo "Colmap failed to create at least one sparse reconstruction folder"
         exit 1
+    fi
+    if [ -d "sparse/0" ]; then
+        cp "sparse/0/"* "sparse"
     fi
 fi
 popd
@@ -24,7 +27,7 @@ popd
 mkdir -p openmvs
 pushd openmvs
 if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
-    InterfaceCOLMAP -i ../colmap/sparse/0 -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
+    InterfaceCOLMAP -i ../colmap -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
     ReconstructMesh scene.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS
 fi
 
