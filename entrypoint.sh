@@ -18,7 +18,7 @@ if [[ "$(id -u)" != "$PUID" ]] || [[ "$(id -g)" != "$PGID" ]]; then
     groupadd -g "$PGID" "$GROUPNAME" || true
     useradd -u "${PUID}" -g "${PGID}" "${USERNAME:-containeruser}" || true
     chown -R "${PUID}:${PGID}" "$obj"
-    exec su -g "$(id -gn "$PGID")" "$(id -un "$PUID")" -c "$@"
+    exec su -g "$(id -gn "$PGID")" "$(id -un "$PUID")" -c "$0 $@"
 fi
 
 # === COLMAP ===
