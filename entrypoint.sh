@@ -3,12 +3,25 @@
 cd "$(dirname $(realpath $0))"
 set -ex
 
+# === INPUTS ===
 export obj="$1"
 if [ -z "$obj" ]; then
-    echo "missing obj folder as the first argument. Should point to a folder with an images/ subfolder"
+    echo "Missing obj folder as the first argument. Should point to a folder with an images/ subfolder"
     exit 1
 fi
 
+# === USER AND PERMISSIONS ===
+export PUID="${PUID:-1000}"
+export PGID="${PGID:-${PUID}}"
+if [[ "$(id -u)" != "$PUID" ]] || [[ "$(id -g)" != "$PGID" ]]; then
+    echo "Running as user $PUID:$PGID..."
+    groupadd -g "$PGID" "$GROUPNAME" || true
+    useradd -u "${PUID}" -g "${PGID}" "${USERNAME:-containeruser}" || true
+    chown -R "${PUID}:${PGID}" "$obj"
+    exec su -g "$(id -gn "$PGID")" "$(id -un "$PUID")" -c bash
+fi
+
+# === COLMAP ===
 cd "$obj"
 mkdir -p colmap
 pushd colmap
@@ -26,30 +39,40 @@ if [ ! -d "dense" ] || [ ! -z "$force_colmap" ]; then
 fi
 popd
 
+# === OPENMVS ===
+
 mkdir -p openmvs
 pushd openmvs
-if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
+if [ ! -f "scene_mesh.mvs" ] || [ ! -z "$force_openmvs_scene" ]; then
     InterfaceCOLMAP -i ../colmap/dense -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
-    ReconstructMesh scene.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS
+fi
+if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
+    ReconstructMesh scene.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS $ReconstructMesh_SPARSE_ARGS
 fi
 
 # Optional manual crop step (open scene_mesh.ply in blender and remove out-of-bounds triangles)
 
+if [ ! -f "scene_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_mesh_refined" ]; then
+    RefineMesh -i scene.mvs -m scene_mesh.ply -o scene_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS $RefineMesh_SPARSE_ARGS
+fi
 if [ ! -f "scene_mesh_refined_textured.ply" ] || [ ! -z "$force_openmvs_scene_mesh_refined_textured" ]; then
-    RefineMesh -i scene.mvs -m scene_mesh.ply -o scene_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS
-    TextureMesh -i scene.mvs -m scene_mesh_refined.ply -o scene_mesh_refined_textured.obj $OPENMVS_ARGS $TextureMesh_ARGS
+    TextureMesh -i scene.mvs -m scene_mesh_refined.ply -o scene_mesh_refined_textured.obj $OPENMVS_ARGS $TextureMesh_ARGS $TextureMesh_SPARSE_ARGS
 fi
     
-if [ ! -f "scene_dense_mesh.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh" ]; then
+if [ ! -f "scene_dense.mvs" ] || [ ! -z "$force_openmvs_scene_dense" ]; then
     DensifyPointCloud scene.mvs $OPENMVS_ARGS $DensifyPointCloud_ARGS
-    ReconstructMesh scene_dense.mvs $OPENMVS_ARGS $ReconstructMesh_DENSE_ARGS
+fi
+if [ ! -f "scene_dense.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh" ]; then
+    ReconstructMesh scene_dense.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS $ReconstructMesh_DENSE_ARGS
 fi
 
 # Optional manual crop step (open scene_dense_mesh.ply in blender and remove out-of-bounds triangles)
 
 if [ ! -f "scene_dense_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh_refined" ]; then
-    RefineMesh -i scene_dense.mvs -m scene_dense_mesh.ply -o scene_dense_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_DENSE_ARGS
-    TextureMesh -i scene_dense.mvs -m scene_dense_mesh_refined.ply -o scene_dense_mesh_refined_textured.obj $OPENMVS_ARGS $TextureMesh_DENSE_ARGS
+    RefineMesh -i scene_dense.mvs -m scene_dense_mesh.ply -o scene_dense_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS $RefineMesh_DENSE_ARGS
+fi
+if [ ! -f "scene_dense_mesh_refined_textured.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh_refined_textured" ]; then
+    TextureMesh -i scene_dense.mvs -m scene_dense_mesh_refined.ply -o scene_dense_mesh_refined_textured.obj $OPENMVS_ARGS $TextureMesh_ARGS $TextureMesh_DENSE_ARGS
 fi
 popd
 
