@@ -14,10 +14,6 @@ COPY openMVS openMVS
 RUN cd openMVS && mkdir cmake && cd cmake && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=../../VCG .. && cmake --build . -j$(nproc) && cmake --install .
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
-# Create and switch to a custom user
-RUN useradd -d /home/myuser -m myuser
-WORKDIR /home/myuser
-
 # Set entrypoint
 COPY entrypoint.sh entrypoint.sh
 RUN chmod 0777 entrypoint.sh
