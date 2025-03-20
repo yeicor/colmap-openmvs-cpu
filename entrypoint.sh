@@ -63,7 +63,7 @@ fi
 if [ ! -f "scene_dense.mvs" ] || [ ! -z "$force_openmvs_scene_dense" ]; then
     DensifyPointCloud scene.mvs $OPENMVS_ARGS $DensifyPointCloud_ARGS
 fi
-if [ ! -f "scene_dense.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh" ]; then
+if [ ! -f "scene_dense_mesh.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh" ]; then
     ReconstructMesh scene_dense.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS $ReconstructMesh_DENSE_ARGS
 fi
 
