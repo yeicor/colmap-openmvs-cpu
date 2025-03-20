@@ -20,6 +20,7 @@ if [[ "$(id -u)" != "$PUID" ]] || [[ "$(id -g)" != "$PGID" ]]; then
     chown -R "${PUID}:${PGID}" "$obj"
     exec su -p -g "$(id -gn "$PGID")" "$(id -un "$PUID")" -c "$0 $@"
 fi
+export PATH="/usr/local/bin/OpenMVS:$PATH"
 
 # === COLMAP ===
 cd "$obj"
