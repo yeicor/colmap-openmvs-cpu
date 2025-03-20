@@ -44,7 +44,7 @@ popd
 
 mkdir -p openmvs
 pushd openmvs
-if [ ! -f "scene_mesh.mvs" ] || [ ! -z "$force_openmvs_scene" ]; then
+if [ ! -f "scene.mvs" ] || [ ! -z "$force_openmvs_scene" ]; then
     InterfaceCOLMAP -i ../colmap/dense -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
 fi
 if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
