@@ -6,16 +6,7 @@
   ],
   "automerge": true,
   "automergeType": "branch",
-  "schedule": [
-    "before 3am on Saturday"
-  ],
   "git-submodules": {
     "enabled": true
-  },
-  "lockFileMaintenance": {
-    "enabled": true,
-    "schedule": [
-      "before 3am on Saturday"
-    ]
   }
 }
