@@ -1,7 +1,7 @@
 FROM archlinux/archlinux:base-devel-20250710.0.380727
 
 # Install system dependencies (build and runtime)
-RUN pacman -Syu --needed git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt5-base gambas3-gb-qt5-opengl ceres-solver boost boost-libs opencv cgal # metis cgal-qt6
+RUN pacman -Syu --noconfirm --needed git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt5-base gambas3-gb-qt5-opengl ceres-solver boost boost-libs opencv cgal # metis cgal-qt6
 RUN git clone https://aur.archlinux.org/metis.git && cd metis && makepkg -si --noconfirm && cd .. && rm -rf metis
 WORKDIR /build
 
