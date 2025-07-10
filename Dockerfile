@@ -18,7 +18,8 @@ RUN cd openMVS && mkdir mybuild && cd mybuild && cmake -DCMAKE_BUILD_TYPE=Releas
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
 # Copy and build colmap git submodule
-COPY colmap colmap # Patch waiting for https://github.com/colmap/colmap/pull/3470
+COPY colmap colmap 
+# - Patch waiting for https://github.com/colmap/colmap/pull/3470
 RUN cd colmap && sed -i 's/${METIS_LIBRARIES}/${METIS_LIBRARIES} ${GK_LIBRARIES}/g' cmake/FindMetis.cmake && \
     mkdir build && cd build && cmake .. -GNinja && ninja && ninja install
     
