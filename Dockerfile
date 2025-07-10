@@ -1,17 +1,20 @@
-FROM ubuntu:plucky-20250619
+FROM archlinux/archlinux:base-devel-20250710.0.380727
 
 # Install system dependencies (build and runtime)
-RUN apt-get update -yq && apt-get -yq install build-essential git cmake libpng-dev libjpeg-dev libtiff-dev libglu1-mesa-dev libglew-dev libglfw3-dev python3-dev git cmake ninja-build build-essential libboost-program-options-dev libboost-graph-dev libboost-system-dev libeigen3-dev libflann-dev libfreeimage-dev libmetis-dev libgoogle-glog-dev libgtest-dev libgmock-dev libsqlite3-dev libglew-dev qtbase5-dev libqt5opengl5-dev libcgal-dev libceres-dev libboost-iostreams-dev libboost-program-options-dev libboost-system-dev libboost-serialization-dev libopencv-dev libcgal-dev libcgal-qt6-dev
+RUN pacman -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt6-base gambas3-gb-qt6-opengl vtk ceres-solver boost boost-libs opencv cgal
+RUN git clone "https://github.com/KarypisLab/gklib" && cd gklib && make config cc=gcc prefix=/usr shared=1 && make install && cp /usr/lib/libGKlib.so.0 /usr/lib/libGKlib.so && cd .. && rm -rf gklib && \
+    git clone "https://github.com/KarypisLab/metis" && cd metis && make config cc=gcc prefix=/usr shared=1 gklib_path=/usr && make install && cd .. && rm -rf metis
 WORKDIR /build
 
 # Copy and build colmap git submodule
 COPY colmap colmap
-RUN cd colmap && mkdir build && cd build && cmake .. -GNinja && ninja && ninja install
+RUN cd colmap && sed -i 's/${METIS_LIBRARIES}/${METIS_LIBRARIES} ${GK_LIBRARIES}/g' cmake/FindMetis.cmake && \
+    mkdir build && cd build && cmake .. -GNinja && ninja && ninja install
 
 # Copy and build openmvs git submodule
 COPY VCG VCG
 COPY openMVS openMVS
-RUN cd openMVS && mkdir cmake && cd cmake && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=../../VCG .. && cmake --build . -j$(nproc) && cmake --install .
+RUN cd openMVS && mkdir mybuild && cd mybuild && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DVCG_ROOT=$(realpath ../../VCG) .. && cmake --build . -j$(nproc) && cmake --install .
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
 # Set entrypoint
