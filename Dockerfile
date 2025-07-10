@@ -14,7 +14,7 @@ RUN cd colmap && sed -i 's/${METIS_LIBRARIES}/${METIS_LIBRARIES} ${GK_LIBRARIES}
 # Copy and build openmvs git submodule
 COPY VCG VCG
 COPY openMVS openMVS
-RUN cd openMVS && mkdir cmake && cd cmake && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=../../VCG .. && cmake --build . -j$(nproc) && cmake --install .
+RUN cd openMVS && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DVCG_ROOT=$(realpath ../../VCG) .. && cmake --build . -j$(nproc) && cmake --install .
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
 # Set entrypoint
