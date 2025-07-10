@@ -7,3 +7,9 @@
 [submodule "VCG"]
 	path = VCG
 	url = https://github.com/cdcseacave/VCG
+[submodule "gklib"]
+	path = gklib
+	url = https://github.com/KarypisLab/gklib
+[submodule "metis"]
+	path = metis
+	url = https://github.com/KarypisLab/metis
