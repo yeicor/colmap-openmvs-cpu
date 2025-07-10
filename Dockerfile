@@ -2,7 +2,7 @@ FROM archlinux/archlinux:base-devel-20250710.0.380727
 
 # Install system dependencies (build and runtime)
 RUN pacman -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt5-base gambas3-gb-qt5-opengl ceres-solver boost boost-libs opencv cgal # metis cgal-qt6
-RUN git clone "https://github.com/KarypisLab/gklib" && cd gklib && sed -i 's/CONFIG_FLAGS = -DCMAKE_VERBOSE_MAKEFILE=1/CONFIG_FLAGS = -DBUILD_SHARED_LIBS=TRUE -DCMAKE_GENERATOR="Unix Makefiles"/' Makefile && make config cc=gcc prefix=/usr && make install && cd .. && rm -rf gklib && \
+RUN git clone "https://github.com/KarypisLab/gklib" && cd gklib && make config cc=gcc prefix=/usr shared=1 && make install && cd .. && rm -rf gklib && \
     git clone "https://github.com/KarypisLab/metis" && cd metis && make config cc=gcc prefix=/usr shared=1 gklib_path=/usr && make install && cd .. && rm -rf metis
 WORKDIR /build
 
