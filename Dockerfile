@@ -8,7 +8,8 @@ WORKDIR /build
 
 # Copy and build colmap git submodule
 COPY colmap colmap
-RUN cd colmap && mkdir build && cd build && cmake .. -GNinja && ninja && ninja install
+RUN cd colmap && sed -i "s/metis INTERFACE ${METIS_LIBRARIES}/metis INTERFACE ${METIS_LIBRARIES} ${GK_LIBRARIES}/g" cmake/FindMetis.cmake && \
+    mkdir build && cd build && cmake .. -GNinja && ninja && ninja install
 
 # Copy and build openmvs git submodule
 COPY VCG VCG
