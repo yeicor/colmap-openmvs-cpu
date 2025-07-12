@@ -15,4 +15,4 @@
 	url = https://github.com/KarypisLab/metis
 [submodule "glomap"]
 	path = glomap
-	url = https://github.com/colmap/glomap
+	url = https://github.com/yeicor/glomap
