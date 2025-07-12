@@ -12,6 +12,7 @@ jobs:
       - uses: "actions/checkout@v4"
         with:
           submodules: "true" # Recursive is broken due to glomap (not required anyway)
+          persist-credentials: "false" # Also due to broken glomap submodule
 
       - run: |
           echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
