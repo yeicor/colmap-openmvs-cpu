@@ -23,15 +23,27 @@ fi
 export PATH="/usr/local/bin/OpenMVS:$PATH"
 
 # === COLMAP ===
+
 cd "$obj"
 mkdir -p colmap
 pushd colmap
-if [ ! -d "sparse/0" ] || [ ! -z "$force_colmap" ]; then
-    colmap automatic_reconstructor --image_path ../images --workspace_path . --quality extreme --camera_model OPENCV --single_camera=1 --use_gpu=0 $COLMAP_ARGS $automatic_reconstructor_ARGS || echo "Colmap exited with non-zero code $? (this is probably expected)"
-    if [ ! -d "sparse/0" ]; then
-        echo "Colmap failed to create at least one sparse reconstruction folder"
-        exit 1
-    fi
+if [ ! -z "$force_colmap_feature_extractor" ] || [ ! -f "database.db" ]; then
+  # Recommended if possible: --ImageReader.single_camera=1 --ImageReader.camera_model=OPENCV
+  colmap feature_extractor  --image_path ../images --database_path database.db $COLMAP_ARGS $feature_extractor_ARGS
+fi
+
+if [ ! -z "$force_colmap_matcher" ] || [ ! -f ".matches-done" ]; then
+  matcher="${matcher:-exhaustive}" # exhaustive, sequential, vocab_tree...
+  colmap ${matcher}_matcher --database_path database.db $COLMAP_ARGS $matcher_ARGS
+  touch .matches-done
+fi
+
+if [ ! -z "$force_colmap_mapper" ] || [ ! -d "sparse/0" ]; then
+  if [[ "${USE_GLOMAP:-yes}" == "yes" ]]; then
+      glomap mapper --image_path ../images --database_path database.db --output_path sparse/0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
+  else # Use colmap's slower built-in mapper instead
+      colmap mapper --image_path ../images --database_path database.db --output_path sparse/0 $COLMAP_ARGS $colmap_mapper_ARGS $mapper_ARGS
+  fi
 fi
 
 if [ ! -d "dense" ] || [ ! -z "$force_colmap" ]; then
@@ -52,6 +64,10 @@ if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
 fi
 
 # Optional manual crop step (open scene_mesh.ply in blender and remove out-of-bounds triangles)
+if [ ! -z "$PAUSE" ] || [ ! -z "$PAUSE_BEFORE_REFINE" ]; then
+    echo "OpenMVS mesh is ready, you can now open scene_mesh.ply in blender and remove out-of-bounds triangles. Press any key to continue..."
+    read -n 1 -s
+fi
 
 if [ ! -f "scene_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_mesh_refined" ]; then
     RefineMesh -i scene.mvs -m scene_mesh.ply -o scene_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS $RefineMesh_SPARSE_ARGS
@@ -68,6 +84,10 @@ if [ ! -f "scene_dense_mesh.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh" ]
 fi
 
 # Optional manual crop step (open scene_dense_mesh.ply in blender and remove out-of-bounds triangles)
+if [ ! -z "$PAUSE" ] || [ ! -z "$PAUSE_BEFORE_REFINE_DENSE" ]; then
+    echo "OpenMVS dense mesh is ready, you can now open scene_dense_mesh.ply in blender and remove out-of-bounds triangles. Press any key to continue..."
+    read -n 1 -s
+fi
 
 if [ ! -f "scene_dense_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh_refined" ]; then
     RefineMesh -i scene_dense.mvs -m scene_dense_mesh.ply -o scene_dense_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS $RefineMesh_DENSE_ARGS
