@@ -15,10 +15,10 @@ export PUID="${PUID:-1000}"
 export PGID="${PGID:-${PUID}}"
 if [[ "$(id -u)" != "$PUID" ]] || [[ "$(id -g)" != "$PGID" ]]; then
     echo "Running as user $PUID:$PGID..."
-    groupadd -g "$PGID" "$GROUPNAME" || true
+    groupadd -g "$PGID" "${GROUPNAME:-containergroup}" || true
     useradd -u "${PUID}" -g "${PGID}" "${USERNAME:-containeruser}" || true
     chown -R "${PUID}:${PGID}" "$obj"
-    exec su -p -g "$(id -gn "$PGID")" "$(id -un "$PUID")" -c "$0 $@"
+    exec su -p -g "${GROUPNAME:-containergroup}" "${USERNAME:-containeruser}" -c "$0 $@"
 fi
 export PATH="/usr/local/bin/OpenMVS:$PATH"
 
@@ -33,8 +33,8 @@ if [ ! -z "$force_colmap_feature_extractor" ] || [ ! -f "database.db" ]; then
 fi
 
 if [ ! -z "$force_colmap_matcher" ] || [ ! -f ".matches-done" ]; then
-  matcher="${matcher:-exhaustive}" # exhaustive, sequential, vocab_tree...
-  colmap ${matcher}_matcher --database_path database.db $COLMAP_ARGS $matcher_ARGS
+  colmap_matcher="${colmap_matcher:-vocab_tree}" # exhaustive, sequential, vocab_tree...
+  colmap ${colmap_matcher}_matcher --database_path database.db $COLMAP_ARGS $matcher_ARGS
   touch .matches-done
 fi
 
