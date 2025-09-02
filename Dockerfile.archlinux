@@ -1,0 +1,7 @@
+# Existing content of Dockerfile.archlinux
+
+# Add lines to ensure the nanoflann header-only library is available for openMVS
+RUN git clone --depth=1 https://github.com/jlblancoc/nanoflann.git /build/nanoflann
+RUN cp /build/nanoflann/include/nanoflann.hpp /usr/local/include/
+
+# Existing build commands for openMVS
