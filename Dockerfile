@@ -12,6 +12,16 @@ COPY metis metis
 RUN cd metis && echo "target_link_libraries(metis libGKlib.a)" >> libmetis/CMakeLists.txt && \
     make config cc=gcc prefix=/usr shared=1 gklib_path=/usr && make install && cd ..
 
+# Download nanoflann header-only library
+COPY nanoflann nanoflann
+RUN cp /build/nanoflann/include/nanoflann.hpp /usr/local/include/
+RUN echo '\
+find_path(NANOFLANN_INCLUDE_DIR nanoflann.hpp PATHS /usr/local/include /usr/include)\n\
+if(NANOFLANN_INCLUDE_DIR)\n\
+    set(NANOFLANN_FOUND TRUE)\n\
+endif()\n' > /opt/Findnanoflann.cmake
+ENV CMAKE_MODULE_PATH="/opt"
+    
 # Copy and build VCG and openmvs git submodule
 COPY VCG VCG
 COPY openMVS openMVS
