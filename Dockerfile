@@ -12,6 +12,10 @@ COPY metis metis
 RUN cd metis && echo "target_link_libraries(metis libGKlib.a)" >> libmetis/CMakeLists.txt && \
     make config cc=gcc prefix=/usr shared=1 gklib_path=/usr && make install && cd ..
 
+# Copy and build nanoflann (required for openMVS)
+COPY nanoflann nanoflann
+RUN cd nanoflann && cmake -B build -S . && cmake --install build
+    
 # Copy and build VCG and openmvs git submodule
 COPY VCG VCG
 COPY openMVS openMVS
