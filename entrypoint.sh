@@ -16,9 +16,9 @@ export PGID="${PGID:-${PUID}}"
 if [[ "$(id -u)" != "$PUID" ]] || [[ "$(id -g)" != "$PGID" ]]; then
     echo "Running as user $PUID:$PGID..."
     groupadd -g "$PGID" "${GROUPNAME:-containergroup}" || true
-    useradd -u "${PUID}" -g "${PGID}" "${USERNAME:-containeruser}" || true
+    useradd -m -u "${PUID}" -g "${PGID}" "${USERNAME:-containeruser}" || true
     chown -R "${PUID}:${PGID}" "$obj"
-    exec su -p -g "${GROUPNAME:-containergroup}" "${USERNAME:-containeruser}" -c "$0 $@"
+    exec su - "${USERNAME:-containeruser}" -c "$0 $@"
 fi
 export PATH="/usr/local/bin/OpenMVS:$PATH"
 
