@@ -20,7 +20,7 @@ RUN cd nanoflann && cmake -B build -S . && cmake --install build
 # Copy and build VCG and openmvs git submodule
 COPY VCG VCG
 COPY openMVS openMVS
-RUN sed -E -i 's/FIND_PACKAGE(Boost REQUIRED COMPONENTS ([a-zA-Z0-9_ ]+)system)/FIND_PACKAGE(Boost REQUIRED COMPONENTS \1)/g' openMVS/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
+RUN sed -E -i 's/FIND_PACKAGE\(Boost REQUIRED COMPONENTS ([^)]*)\bsystem\b ? ([^)]*)\)/FIND_PACKAGE(Boost REQUIRED COMPONENTS \1\2)/g' openMVS/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
 RUN cd openMVS && mkdir mybuild && cd mybuild && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=$(realpath ../../VCG) -GNinja .. && ninja && ninja install
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
