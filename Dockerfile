@@ -1,4 +1,4 @@
-FROM archlinux:base-devel-20251221.0.472429
+FROM archlinux:base-devel-20250706.0.377547
 
 # Install system dependencies (build and runtime)
 RUN sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
