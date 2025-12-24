@@ -1,7 +1,7 @@
 FROM archlinux:base-devel-20250706.0.377547
 
 # Install system dependencies (build and runtime)
-RUN pacman -Sy --noconfirm --needed archlinux-keyring && sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
+RUN yes | sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
 RUN sudo -u builduser bash -c "yay -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt6-base gambas3-gb-qt6-opengl vtk ceres-solver boost boost-libs opencv cgal openimageio"
 RUN mkdir -p /build # Otherwise docker cache fails?!
 WORKDIR /build
