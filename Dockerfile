@@ -1,7 +1,7 @@
 FROM archlinux:base-devel-20251221.0.472429
 
 # Install system dependencies (build and runtime)
-RUN sudo pacman -Syu --noconfirm --needed git base-devel && sudo chage -E -1 git && git clone https://aur.archlinux.org/yay.git && cd yay && su nobody -c "makepkg -s --noconfirm" && sudo pacman -U --noconfirm yay-*.pkg.tar.zst && cd .. && rm -rf yay
+RUN sudo pacman -Syu --noconfirm --needed git base-devel && git clone https://aur.archlinux.org/yay.git && cd yay && sudo chage -E -1 nobody && su nobody -c "makepkg -s --noconfirm" && sudo pacman -U --noconfirm yay-*.pkg.tar.zst && cd .. && rm -rf yay
 RUN yay -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt6-base gambas3-gb-qt6-opengl vtk ceres-solver boost boost-libs opencv cgal openimageio
 RUN mkdir -p /build # Otherwise docker cache fails?!
 WORKDIR /build
