@@ -1,7 +1,7 @@
-FROM archlinux:base-devel-20250706.0.377547
+FROM archlinux:base-devel-20251221.0.472429
 
 # Install system dependencies (build and runtime)
-RUN yes | sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
+RUN sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
 RUN sudo -u builduser bash -c "yay -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja boost eigen flann freeimage google-glog gtest gmock sqlite glew qt6-base gambas3-gb-qt6-opengl vtk ceres-solver boost boost-libs opencv cgal openimageio"
 RUN mkdir -p /build # Otherwise docker cache fails?!
 WORKDIR /build
@@ -20,6 +20,7 @@ RUN cd nanoflann && cmake -B build -S . && cmake --install build
 # Copy and build VCG and openmvs git submodule
 COPY VCG VCG
 COPY openMVS openMVS
+RUN sed -E -i 's/FIND_PACKAGE(Boost REQUIRED COMPONENTS ([a-zA-Z0-9_ ]+)system)/FIND_PACKAGE(Boost REQUIRED COMPONENTS \1)/g' openMVS/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
 RUN cd openMVS && mkdir mybuild && cd mybuild && cmake -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=$(realpath ../../VCG) -GNinja .. && ninja && ninja install
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
