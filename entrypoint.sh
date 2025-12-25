@@ -29,7 +29,7 @@ mkdir -p colmap
 pushd colmap
 if [ ! -z "$force_colmap_feature_extractor" ] || [ ! -f "database.db" ]; then
   # Recommended if possible: --ImageReader.single_camera=1 --ImageReader.camera_model=OPENCV
-  colmap feature_extractor  --image_path ../images --database_path database.db --FeatureExtraction.use_gpu=0 $COLMAP_ARGS $feature_extractor_ARGS
+  colmap feature_extractor --image_path ../images --database_path database.db --FeatureExtraction.use_gpu=0 $COLMAP_ARGS $feature_extractor_ARGS
 fi
 
 if [ ! -z "$force_colmap_matcher" ] || [ ! -f ".matches-done" ]; then
@@ -40,7 +40,7 @@ fi
 
 if [ ! -z "$force_colmap_mapper" ] || [ ! -d "sparse/0" ]; then
   if [[ "${USE_GLOMAP:-yes}" == "yes" ]]; then
-      glomap mapper --image_path ../images --database_path database.db --output_path sparse --GlobalPositioning.use_gpu=0 --BundleAdjustment.use_gpu=0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
+      colmap global_mapper --image_path ../images --database_path database.db --output_path sparse --GlobalPositioning.use_gpu=0 --BundleAdjustment.use_gpu=0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
   else # Use colmap's slower built-in mapper instead
       mkdir -p sparse
       colmap mapper --image_path ../images --database_path database.db --output_path sparse $COLMAP_ARGS $colmap_mapper_ARGS $mapper_ARGS
