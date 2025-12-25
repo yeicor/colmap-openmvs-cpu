@@ -31,7 +31,7 @@ RUN cd colmap && mkdir build && cd build && cmake -GNinja .. && ninja && ninja i
 # Copy and build glomap git submodule
 COPY glomap glomap
 RUN sed -E -i 's/FIND_PACKAGE\(Boost REQUIRED\)/FIND_PACKAGE(Boost REQUIRED COMPONENTS algorithm filesystem graph heap program-options property-map property-tree)/g' glomap/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
-RUN cd glomap && mkdir build && cd build && cmake -GNinja .. && ninja && ninja install
+RUN cd glomap && mkdir build && cd build && cmake -GNinja "-DFETCHCONTENT_SOURCE_DIR_COLMAP=$(pwd)/../colmap" .. && ninja && ninja install
     
 # Cleanup stuff
 WORKDIR /
