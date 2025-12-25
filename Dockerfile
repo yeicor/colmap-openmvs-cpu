@@ -26,13 +26,8 @@ ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
 # Copy and build colmap git submodule
 COPY colmap colmap
-RUN cd colmap && mkdir build && cd build && cmake -GNinja .. && ninja && ninja install
+RUN cd colmap && mkdir build && cd build && cmake -GNinja .. && ninja && ninja install    
 
-# Copy and build glomap git submodule
-COPY glomap glomap
-RUN sed -E -i 's/FIND_PACKAGE\(Boost REQUIRED\)/FIND_PACKAGE(Boost REQUIRED COMPONENTS algorithm filesystem graph heap program-options property-map property-tree)/g' glomap/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
-RUN cd glomap && mkdir build && cd build && cmake -GNinja -DFETCHCONTENT_SOURCE_DIR_COLMAP=$(realpath ../../colmap) .. && ninja && ninja install
-    
 # Cleanup stuff
 WORKDIR /
 RUN rm -rf /build
