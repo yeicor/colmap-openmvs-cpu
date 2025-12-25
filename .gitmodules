@@ -13,9 +13,6 @@
 [submodule "metis"]
 	path = metis
 	url = https://github.com/KarypisLab/metis
-[submodule "glomap"]
-	path = glomap
-	url = https://github.com/yeicor/glomap
 [submodule "nanoflann"]
 	path = nanoflann
 	url = https://github.com/jlblancoc/nanoflann.git
