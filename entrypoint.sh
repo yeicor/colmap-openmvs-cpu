@@ -40,7 +40,7 @@ fi
 
 if [ ! -z "$force_colmap_mapper" ] || [ ! -d "sparse/0" ]; then
   if [[ "${USE_GLOMAP:-yes}" == "yes" ]]; then
-      colmap global_mapper --image_path ../images --database_path database.db --output_path sparse --GlobalPositioning.use_gpu=0 --BundleAdjustment.use_gpu=0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
+      colmap global_mapper --image_path ../images --database_path database.db --output_path sparse --GlobalMapper.gp_use_gpu=0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
   else # Use colmap's slower built-in mapper instead
       mkdir -p sparse
       colmap mapper --image_path ../images --database_path database.db --output_path sparse $COLMAP_ARGS $colmap_mapper_ARGS $mapper_ARGS
