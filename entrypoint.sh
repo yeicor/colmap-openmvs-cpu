@@ -39,10 +39,10 @@ if [ ! -z "$force_colmap_matcher" ] || [ ! -f ".matches-done" ]; then
 fi
 
 if [ ! -z "$force_colmap_mapper" ] || [ ! -d "sparse/0" ]; then
+  mkdir -p sparse
   if [[ "${USE_GLOMAP:-yes}" == "yes" ]]; then
       colmap global_mapper --image_path ../images --database_path database.db --output_path sparse --GlobalMapper.gp_use_gpu=0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
   else # Use colmap's slower built-in mapper instead
-      mkdir -p sparse
       colmap mapper --image_path ../images --database_path database.db --output_path sparse $COLMAP_ARGS $colmap_mapper_ARGS $mapper_ARGS
   fi
 fi
