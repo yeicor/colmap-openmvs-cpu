@@ -11,14 +11,44 @@ if [ -z "$obj" ]; then
 fi
 
 # === USER AND PERMISSIONS ===
+# If Docker already set a numeric UID/GID and PUID/PGID not explicitly set, trust Docker
+if [[ -z "${PUID+x}" && -z "${PGID+x}" ]]; then
+    export PUID="$(id -u)"
+    export PGID="$(id -g)"
+fi
+
 export PUID="${PUID:-1000}"
 export PGID="${PGID:-${PUID}}"
-if [[ "$(id -u)" != "$PUID" ]] || [[ "$(id -g)" != "$PGID" ]]; then
-    echo "Running as user $PUID:$PGID..."
-    groupadd -g "$PGID" "${GROUPNAME:-containergroup}" || true
-    useradd -m -u "${PUID}" -g "${PGID}" "${USERNAME:-containeruser}" || true
-    chown -R "${PUID}:${PGID}" "$obj"
-    exec su - "${USERNAME:-containeruser}" -c "$0 $@"
+export USERNAME="${USERNAME:-containeruser}"
+export GROUPNAME="${GROUPNAME:-containergroup}"
+
+current_uid="$(id -u)"
+current_gid="$(id -g)"
+
+if [[ "$current_uid" != "$PUID" ]] || [[ "$current_gid" != "$PGID" ]]; then
+    echo "Switching to user $PUID:$PGID..."
+
+    # Resolve or create group
+    existing_group="$(getent group "$PGID" | cut -d: -f1 || true)"
+    if [[ -z "$existing_group" ]]; then
+        groupadd -g "$PGID" "$GROUPNAME"
+        target_group="$GROUPNAME"
+    else
+        target_group="$existing_group"
+    fi
+
+    # Resolve or create user
+    existing_user="$(getent passwd "$PUID" | cut -d: -f1 || true)"
+    if [[ -z "$existing_user" ]]; then
+        useradd -m -u "$PUID" -g "$PGID" "$USERNAME"
+        target_user="$USERNAME"
+    else
+        target_user="$existing_user"
+    fi
+
+    chown -R "$PUID:$PGID" "$obj"
+
+    exec su - "$target_user" -c "$0 $@"
 fi
 export PATH="/usr/local/bin/OpenMVS:$PATH"
 
