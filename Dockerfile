@@ -25,6 +25,10 @@ RUN cd tinyxml2 && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITI
 COPY TinyEXIF TinyEXIF
 RUN cd TinyEXIF && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
 
+# Copy and build TinyNPY (required for openMVS)
+COPY TinyNPY TinyNPY
+RUN cd TinyNPY && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
+
 # Copy and build VCG (required for openMVS)
 COPY VCG VCG
 RUN cd VCG && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
