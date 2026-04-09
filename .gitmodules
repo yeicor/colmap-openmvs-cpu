@@ -25,3 +25,6 @@
 [submodule "ceres-solver"]
 	path = ceres-solver
 	url = git@github.com:ceres-solver/ceres-solver.git
+[submodule "TinyNPY"]
+	path = TinyNPY
+	url = git@github.com:cdcseacave/TinyNPY.git
