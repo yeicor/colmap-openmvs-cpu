@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build tools and system dependencies required by vcpkg ports
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git pkg-config \
+        build-essential cmake ninja-build git pkg-config gfortran \
         ca-certificates curl zip unzip tar python3 \
         autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
         libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
