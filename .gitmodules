@@ -4,27 +4,3 @@
 [submodule "openMVS"]
 	path = openMVS
 	url = https://github.com/cdcseacave/openMVS
-[submodule "gklib"]
-	path = gklib
-	url = https://github.com/KarypisLab/gklib
-[submodule "metis"]
-	path = metis
-	url = https://github.com/KarypisLab/metis
-[submodule "nanoflann"]
-	path = nanoflann
-	url = https://github.com/jlblancoc/nanoflann.git
-[submodule "TinyEXIF"]
-	path = TinyEXIF
-	url = git@github.com:cdcseacave/TinyEXIF.git
-[submodule "tinyxml2"]
-	path = tinyxml2
-	url = git@github.com:leethomason/tinyxml2.git
-[submodule "VCG"]
-	path = VCG
-	url = git@github.com:cdcseacave/VCG.git
-[submodule "ceres-solver"]
-	path = ceres-solver
-	url = git@github.com:ceres-solver/ceres-solver.git
-[submodule "TinyNPY"]
-	path = TinyNPY
-	url = git@github.com:cdcseacave/TinyNPY.git

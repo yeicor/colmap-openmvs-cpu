@@ -1,57 +1,85 @@
-FROM archlinux:base-devel-20260329.0.507017
+FROM ubuntu:24.04
 
-# Install system dependencies (build and runtime)
-RUN sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
-RUN sudo -u builduser bash -c "yay -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja flann freeimage google-glog gtest gmock sqlite glew qt6-base gambas3-gb-qt6-opengl vtk boost boost-libs opencv cgal openimageio eigen3 suitesparse"
-RUN mkdir -p /build # Otherwise docker cache fails?!
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build tools and system dependencies required by vcpkg ports
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        ninja-build \
+        git \
+        pkg-config \
+        curl \
+        zip \
+        unzip \
+        tar \
+        python3 \
+        autoconf \
+        autoconf-archive \
+        automake \
+        bison \
+        libtool \
+        libltdl-dev \
+        nasm \
+        libgl-dev \
+        libglu1-mesa-dev \
+        libxmu-dev \
+        libdbus-1-dev \
+        libxtst-dev \
+        libxi-dev \
+        libxinerama-dev \
+        libxcursor-dev \
+        xorg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bootstrap vcpkg (dependency manager used by both colmap and openMVS)
+ENV VCPKG_ROOT=/opt/vcpkg
+RUN git clone --depth 1 https://github.com/microsoft/vcpkg.git $VCPKG_ROOT \
+    && $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
+ENV PATH="$VCPKG_ROOT:$PATH"
+
+RUN mkdir -p /build
 WORKDIR /build
 
-# Copy and build gklib and metis git submodules (colmap likes gklib statically compiled within libmetis.so)
-COPY gklib gklib
-RUN cd gklib && CFLAGS="-fPIC" make config cc=gcc prefix=/usr && make install && cd ..
-COPY metis metis
-RUN cd metis && echo "target_link_libraries(metis libGKlib.a)" >> libmetis/CMakeLists.txt && \
-    make config cc=gcc prefix=/usr shared=1 gklib_path=/usr && make install && cd ..
+# Build colmap; vcpkg reads colmap/vcpkg.json and automatically installs all dependencies.
+# x64-linux-release builds only release-mode libs (no debug), halving build time and
+# package size; it is also the triplet used by openMVS's own upstream CI.
+COPY colmap colmap
+RUN cmake -S colmap -B colmap/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+        -DVCPKG_TARGET_TRIPLET=x64-linux-release \
+        -DGUI_ENABLED=OFF \
+        -DCUDA_ENABLED=OFF \
+        -DTESTS_ENABLED=OFF \
+        -GNinja \
+    && cmake --build colmap/build \
+    && cmake --install colmap/build
 
-# Copy and build nanoflann (required for openMVS)
-COPY nanoflann nanoflann
-RUN cd nanoflann && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
-
-# Copy and build tinyxml2 (required for TinyEXIF)
-COPY tinyxml2 tinyxml2
-RUN cd tinyxml2 && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON && cmake --build build && cmake --install build
-
-# Copy and build TinyEXIF (required for openMVS)
-COPY TinyEXIF TinyEXIF
-RUN cd TinyEXIF && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
-
-# Copy and build TinyNPY (required for openMVS)
-COPY TinyNPY TinyNPY
-RUN cd TinyNPY && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
-
-# Copy and build VCG (required for openMVS)
-COPY VCG VCG
-RUN cd VCG && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
-    
-# Copy and build openMVS git submodule (required for colmap)
+# Build openMVS; vcpkg reads openMVS/vcpkg.json and automatically installs all dependencies
 COPY openMVS openMVS
-RUN sed -E -i 's/FIND_PACKAGE\(Boost REQUIRED COMPONENTS ([^)]*)\bsystem\b ? ([^)]*)\)/FIND_PACKAGE(Boost REQUIRED COMPONENTS \1\2)/g' openMVS/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
-RUN cd openMVS && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DOpenMVS_USE_PYTHON=OFF -DVCG_ROOT=$(realpath ../VCG) -GNinja && cmake --build build && cmake --install build
+RUN cmake -S openMVS -B openMVS/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+        -DVCPKG_TARGET_TRIPLET=x64-linux-release \
+        -DOpenMVS_USE_CUDA=OFF \
+        -DOpenMVS_USE_PYTHON=OFF \
+        -GNinja \
+    && cmake --build openMVS/build \
+    && cmake --install openMVS/build
+
 ENV PATH=/usr/local/bin/OpenMVS:$PATH
 
-# Copy and build ceres-solver (required for colmap)
-COPY ceres-solver ceres-solver
-RUN cd ceres-solver && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DSUITESPARSE=ON && cmake --build build && cmake --install build
-
-# Copy and build colmap git submodule
-COPY colmap colmap
-RUN cd colmap && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -GNinja && cmake --build build && cmake --install build
-
-# Cleanup stuff
-WORKDIR /
-RUN rm -rf /build
+# Install vcpkg-built runtime libraries to the system path and clean up build artifacts.
+# Both projects use the same triplet, so their shared dependencies are identical versions;
+# cp -an (no-clobber) safely handles any overlapping .so files without conflicts.
+RUN find /build -path "*/vcpkg_installed/*/lib" -type d \
+        -exec cp -an "{}"/. /usr/local/lib/ \; \
+    && ldconfig \
+    && rm -rf /build
 
 # Set entrypoint
+WORKDIR /
 COPY entrypoint.sh entrypoint.sh
 RUN chmod 0777 entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]
