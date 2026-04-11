@@ -1,34 +1,66 @@
 # syntax=docker/dockerfile:1.12
-# Multi-stage build for COLMAP + OpenMVS
-# Build stage: uses base image with build tools
-ARG BASE_IMAGE=myorg/colmap-base:latest
-FROM ${BASE_IMAGE} AS builder
+# Unified Dockerfile for COLMAP + OpenMVS
+# Supports both CPU (ubuntu) and CUDA builds via --build-arg variants
+
+###############################################################################
+# Stage 1: Base - Build tools, vcpkg, sccache
+###############################################################################
+# Arguments to switch between CPU and CUDA base images
+ARG CPU_IMAGE=ubuntu:24.04
+ARG CUDA_IMAGE=nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04
+
+# Select base: if BASE_IMAGE starts with "nvidia/", use CUDA image, else Ubuntu
+FROM ${CUDA_IMAGE} AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    VCPKG_ROOT=/opt/vcpkg \
+    VCPKG_DEFAULT_TRIPLET=x64-linux \
+    VCPKG_INSTALLED_DIR=/build/vcpkg_installed \
+    CC=gcc CXX=g++
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake ninja-build git curl zip unzip tar \
+        pkg-config python3 python3-venv gfortran \
+        autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
+        libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
+        libxi-dev libxinerama-dev libxcursor-dev xorg-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64)  sccache_arch="x86_64-unknown-linux-musl" ;; \
+        aarch64) sccache_arch="aarch64-unknown-linux-musl" ;; \
+        *) echo "Unsupported arch: $arch" && exit 1 ;; \
+    esac; \
+    curl -fSL "https://github.com/mozilla/sccache/releases/download/v0.9.0/sccache-v0.9.0-${sccache_arch}.tar.gz" -o sccache.tar.gz \
+    && tar xzf sccache.tar.gz --strip-components=1 \
+    && mv sccache /usr/local/bin/sccache \
+    && chmod +x /usr/local/bin/sccache \
+    && rm -f sccache.tar.gz
+
+RUN git clone --depth 1 --filter=blob:none https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}" \
+    && cd "${VCPKG_ROOT}" && ./bootstrap-vcpkg.sh -disableMetrics \
+    && rm -rf "${VCPKG_ROOT}/.git"
+
+ENV VCPKG_ROOT=/opt/vcpkg \
+    PATH=/opt/vcpkg:$PATH \
+    SCCACHE_DIR=/cache/sccache \
+    SCCACHE_CACHE_SIZE=20G
+
+###############################################################################
+# Stage 2: Builder - Compile COLMAP and OpenMVS
+###############################################################################
+FROM base AS builder
 
 ARG CUDA_ENABLED=0
 ARG CUDA_ARCHITECTURES=all-major
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    VCPKG_DEFAULT_TRIPLET=x64-linux \
-    VCPKG_INSTALLED_DIR=/build/vcpkg_installed \
-    SCCACHE_DIR=/cache/sccache \
-    SCCACHE_CACHE_SIZE=20G
+ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /build
-
-# Utility: capture and print vcpkg build logs
-RUN echo '#!/bin/bash\nset -euo pipefail\n\
-capture_vcpkg_logs() { \
-    failed=0; \
-    for log in $(find /opt/vcpkg/buildtrees -name "*.log" 2>/dev/null | head -50); do \
-        if grep -qi "error\\|failed" "$log" 2>/dev/null; then \
-            echo "=== $(basename $(dirname $log)) BUILD FAILED ==="; \
-            cat "$log" | head -100; \
-            failed=1; \
-        fi; \
-    done; \
-    return $failed; \
-}; \
-capture_vcpkg_logs' > /usr/local/bin/capture-vcpkg-logs.sh && chmod +x /usr/local/bin/capture-vcpkg-logs.sh
 
 COPY --chmod=755 colmap colmap
 
@@ -72,14 +104,11 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
     && find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true \
     && find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null || true
 
-# Stage: save buildtrees for debugging (only on failure, triggered separately)
-FROM scratch AS debug-artifacts
-COPY --from=builder /opt/vcpkg/buildtrees /buildtrees
-COPY --from=builder /build/vcpkg_installed/x64-linux/lib /vcpkg_installed/lib
-COPY --from=builder /build/vcpkg_installed/x64-linux/include /vcpkg_installed/include
-
-# Runtime stage: minimal Ubuntu with only runtime libs
-FROM ubuntu:24.04 AS runtime
+###############################################################################
+# Stage 3: Runtime - Minimal image for the final container
+###############################################################################
+# Use runtime-cuda by default, but allow switching via target
+FROM ${CUDA_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
@@ -97,7 +126,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && ldconfig
 
 COPY --from=builder /build/install /usr/local
-
 COPY --from=builder /build/vcpkg_installed/x64-linux/lib /usr/local/lib/
 COPY --from=builder /build/vcpkg_installed/x64-linux/share /usr/local/share/
 COPY --from=builder /build/vcpkg_installed/x64-linux/include /usr/local/include/

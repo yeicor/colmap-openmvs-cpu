@@ -27,25 +27,24 @@ jobs:
           username: "yeicor"
           password: "${{ secrets.DOCKERHUB_TOKEN }}"
 
-      - name: Build base image
-        run: |
-          DOCKER_BUILDKIT=1 docker build -f Dockerfile.base -t ${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }} .
-
-      - name: Build CPU image
+      - name: Build CPU image (Ubuntu base)
         run: |
           DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} \
-            --build-arg BASE_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }} .
+            --target base-cpu .
+
+      - name: Build builder stage with CPU (for caching)
+        run: |
+          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:builder-cpu-${{ steps.build_tag.outputs.TAG }} \
+            --target builder --build-arg CUDA_ENABLED=0 .
 
       - name: Build CUDA image
         run: |
           DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} \
-            --build-arg BASE_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }} \
-            --build-arg CUDA_ENABLED=1 .
+            --target runtime-cuda --build-arg CUDA_ENABLED=1 .
 
       - name: Push images
         if: env.IS_MAIN == 'true'
         run: |
-          docker push ${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }}
           docker push ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }}
           docker push ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }}
           docker tag ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} ${{ env.DOCKER_IMAGE_NAME }}:cpu-latest
