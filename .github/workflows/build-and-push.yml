@@ -36,20 +36,32 @@ jobs:
       - id: meta
         run: |
           set -euo pipefail
+
           DATE="$(date +'%Y%m%d')"
           SHORT_SHA="${GITHUB_SHA:0:8}"
-          HASH_SHA="$(echo $SHORT_SHA$(git rev-parse --short HEAD | head -c 4)$(date +%H%M))"
 
           COLMAP_TAG="$(git -C colmap describe --tags --abbrev=0 2>/dev/null || echo 'v0.0')"
           COLMAP_VER="${COLMAP_TAG#v}"
+          COLMAP_SHA="$(git -C colmap rev-parse --short HEAD || echo '0000')"
+
           OPENMVS_TAG="$(git -C openMVS describe --tags --abbrev=0 2>/dev/null || echo 'v0.0')"
           OPENMVS_VER="${OPENMVS_TAG#v}"
+          OPENMVS_SHA="$(git -C openMVS rev-parse --short HEAD || echo '0000')"
 
-          TAG="${DATE}-colmap${COLMAP_VER}-${COLMAP_SHA:0:4}-openmvs${OPENMVS_VER}-${OPENMVS_SHA:0:4}"
+          TAG="${DATE}-colmap${COLMAP_VER}-${COLMAP_SHA}-openmvs${OPENMVS_VER}-${OPENMVS_SHA}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          echo "is_main=${{ github.ref == 'refs/heads/main' }}" >> "$GITHUB_OUTPUT"
-          echo "is_tag=${{ startsWith(github.ref, 'refs/tags/v') }}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "is_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_main=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build-base:
     needs: image-metadata
@@ -66,7 +78,6 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
-        if: needs.image-metadata.outputs.is_tag == 'true'
         with:
           username: yeicor
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -79,15 +90,13 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.base
-          push: ${{ needs.image-metadata.outputs.is_tag == 'true' }}
+          push: ${{ needs.image-metadata.outputs.is_tag == 'true' || needs.image-metadata.outputs.is_main == 'true' }}
           platforms: linux/amd64,linux/arm64
           tags: |
             yeicor/colmap-base:latest
             yeicor/colmap-base:${{ needs.image-metadata.outputs.tag }}
-          cache-from: |
-            type=gha,scope=base,ref=yeicor/colmap-base:buildcache-${{ github.run_id }}
-          cache-to: |
-            type=gha,scope=base,mode=max
+          cache-from: type=gha,scope=base
+          cache-to: type=gha,scope=base,mode=max
           provenance: false
           sbom: true
 
@@ -124,7 +133,6 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
-        if: needs.image-metadata.outputs.is_tag == 'true'
         with:
           username: yeicor
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -134,7 +142,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ needs.image-metadata.outputs.is_tag == 'true' }}
+          push: ${{ needs.image-metadata.outputs.is_tag == 'true' || needs.image-metadata.outputs.is_main == 'true' }}
           platforms: ${{ matrix.platforms }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
@@ -142,10 +150,8 @@ jobs:
           tags: |
             yeicor/colmap-openmvs-${{ matrix.variant }}:${{ needs.image-metadata.outputs.tag }}
             yeicor/colmap-openmvs-${{ matrix.variant }}:latest
-          cache-from: |
-            type=gha,scope=${{ matrix.variant }},ref=yeicor/colmap-openmvs-${{ matrix.variant }}:buildcache-${{ github.run_id }}
-          cache-to: |
-            type=gha,scope=${{ matrix.variant }},mode=max
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,scope=${{ matrix.variant }},mode=max
           provenance: true
           sbom: true
 
@@ -186,7 +192,7 @@ jobs:
           echo "3. CUDA architecture - try CUDA_ARCHITECTURES=75" >> "$GITHUB_STEP_SUMMARY"
 
   verify:
-    needs: build-app
+    needs: [image-metadata, build-app]
     runs-on: ubuntu-latest
     if: ${{ needs.image-metadata.outputs.is_tag == 'true' }}
     steps:
@@ -196,5 +202,10 @@ jobs:
             IMG="yeicor/colmap-openmvs-$variant:${{ needs.image-metadata.outputs.tag }}"
             echo "Verifying $IMG..."
             docker pull "$IMG" || continue
-            docker run --rm --gpus all "$IMG" --help 2>&1 | head -5 || true
+
+            if [ "$variant" = "cuda" ]; then
+              docker run --rm --gpus all "$IMG" --help 2>&1 | head -5 || true
+            else
+              docker run --rm "$IMG" --help 2>&1 | head -5 || true
+            fi
           done
