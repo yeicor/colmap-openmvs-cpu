@@ -6,11 +6,9 @@
 # Stage 1: Base - Build tools, vcpkg, sccache
 ###############################################################################
 # Arguments to switch between CPU and CUDA base images
-ARG CPU_IMAGE=ubuntu:24.04
-ARG CUDA_IMAGE=nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04
+ARG BASE_IMAGE=nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04 # or ubuntu:24.04 for CPU
 
-# Select base: if BASE_IMAGE starts with "nvidia/", use CUDA image, else Ubuntu
-FROM ${CUDA_IMAGE} AS base
+FROM ${BASE_IMAGE} AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     VCPKG_ROOT=/opt/vcpkg \
@@ -55,7 +53,7 @@ ENV VCPKG_ROOT=/opt/vcpkg \
 ###############################################################################
 FROM base AS builder
 
-ARG CUDA_ENABLED=0
+ARG CUDA_ENABLED=ON
 ARG CUDA_ARCHITECTURES=all-major
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -108,7 +106,7 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
 # Stage 3: Runtime - Minimal image for the final container
 ###############################################################################
 # Use runtime-cuda by default, but allow switching via target
-FROM ${CUDA_IMAGE} AS runtime
+FROM ${BASE_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \

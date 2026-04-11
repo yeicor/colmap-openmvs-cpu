@@ -27,13 +27,13 @@ jobs:
           username: "yeicor"
           password: "${{ secrets.DOCKERHUB_TOKEN }}"
 
-      - name: Build builder stage with CPU (for caching)
+      - name: Build CPU image
         run: |
-          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:builder-cpu-${{ steps.build_tag.outputs.TAG }} --build-arg CUDA_ENABLED=0 .
+          DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=ubuntu:24.04 --build-arg CUDA_ENABLED=OFF -t ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} .
 
       - name: Build CUDA image
         run: |
-          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} --build-arg CUDA_ENABLED=1 .
+          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} .
 
       - name: Push images
         if: env.IS_MAIN == 'true'
