@@ -6,56 +6,49 @@ on:
 jobs:
   build-and-push:
     runs-on: "ubuntu-latest"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - cuda_enabled: "0"
-            prefix: "cpu"
-          - cuda_enabled: "1"
-            prefix: "cuda"
     steps:
       - uses: "actions/checkout@v6"
         with:
           submodules: "recursive"
 
-      - run: |
-          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      - name: Build tag
+        id: build_tag
+        run: |
           IMAGE_DATE="$(date +'%Y-%m-%d')"
-          git submodule foreach --recursive 'git fetch --tags'
-          COLMAP_DESC="$(git -C colmap tag --list --sort=-authordate | head -n 1)-$(git -C colmap rev-parse --short HEAD)"
-          OPENMVS_DESC="$(git -C openMVS tag --list --sort=-authordate | head -n 1)-$(git -C openMVS rev-parse --short HEAD)"
-          echo "IMAGE_TAG=${IMAGE_DATE}-colmap-${COLMAP_DESC}-openmvs-${OPENMVS_DESC}" >> $GITHUB_ENV
-
-      - name: Set up Docker Buildx
-        uses: "docker/setup-buildx-action@v4"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          echo "TAG=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "IS_MAIN=${{ github.ref == 'refs/heads/main' }}" >> $GITHUB_ENV
 
       - name: Login to Docker Hub
-        if: "github.ref == 'refs/heads/main'"
+        if: env.IS_MAIN == 'true'
         uses: "docker/login-action@v4"
         with:
           username: "yeicor"
           password: "${{ secrets.DOCKERHUB_TOKEN }}"
 
       - name: Build base image
-        if: "github.ref != 'refs/heads/main'"
-        run: docker build -f Dockerfile.base -t ${{ env.DOCKER_IMAGE_NAME }}-base:dev .
+        run: |
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.base -t ${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }} .
 
-      - name: Pull base image
-        if: "github.ref == 'refs/heads/main'"
-        run: docker pull ${{ env.DOCKER_IMAGE_NAME }}-base:latest || docker build -f Dockerfile.base -t ${{ env.DOCKER_IMAGE_NAME }}-base:latest .
+      - name: Build CPU image
+        run: |
+          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} \
+            --build-arg BASE_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }} .
 
-      - name: Build and push main images
-        uses: "docker/build-push-action@v7"
-        with:
-          context: "."
-          file: "./Dockerfile"
-          build-args: |
-            BASE_IMAGE=${{ env.DOCKER_IMAGE_NAME }}-base:dev
-            CUDA_ENABLED=${{ matrix.cuda_enabled }}
-          push: ${{ github.ref == 'refs/heads/main' }}
-          tags: |
-            ${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-latest
-          cache-from: "type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-buildcache"
-          cache-to: "type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-buildcache,mode=max"
+      - name: Build CUDA image
+        run: |
+          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} \
+            --build-arg BASE_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }} \
+            --build-arg CUDA_ENABLED=1 .
+
+      - name: Push images
+        if: env.IS_MAIN == 'true'
+        run: |
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:base-${{ steps.build_tag.outputs.TAG }}
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }}
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }}
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} ${{ env.DOCKER_IMAGE_NAME }}:cpu-latest
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} ${{ env.DOCKER_IMAGE_NAME }}:cuda-latest
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:cpu-latest
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:cuda-latest
