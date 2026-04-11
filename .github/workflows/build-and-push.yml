@@ -1,80 +1,179 @@
+name: Build Docker Images
+
 on:
-  # Trigger the action manually from the UI
   workflow_dispatch:
-  # Trigger the action when pushing to certain branches
   push:
+    branches: [ main ]
   pull_request:
 
+env:
+  IMAGE_NAME: yeicor
+
+########################################
+# 1. Compute tag
+########################################
 jobs:
   compute-tag:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
       image_tag: ${{ steps.tag.outputs.image_tag }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - id: tag
         run: |
-          git submodule foreach --recursive 'git fetch --tags'
-          IMAGE_DATE="$(date +'%Y-%m-%d')"
-          COLMAP_DESC="$(git -C colmap tag --list --sort=-authordate | head -n 1)-$(git -C colmap rev-parse --short HEAD)"
-          OPENMVS_DESC="$(git -C openMVS tag --list --sort=-authordate | head -n 1)-$(git -C openMVS rev-parse --short HEAD)"
-          echo "image_tag=${IMAGE_DATE}-colmap-${COLMAP_DESC}-openmvs-${OPENMVS_DESC}" >> $GITHUB_OUTPUT
+          set -euo pipefail
 
-  build-and-push:
+          DATE="$(date +'%Y%m%d')"
+          COLMAP_SHA="$(git -C colmap rev-parse --short HEAD)"
+          OPENMVS_SHA="$(git -C openMVS rev-parse --short HEAD)"
+
+          COLMAP_TAG="$(git -C colmap describe --tags --abbrev=0 || echo no-tag)"
+          OPENMVS_TAG="$(git -C openMVS describe --tags --abbrev=0 || echo no-tag)"
+
+          echo "image_tag=${DATE}-colmap-${COLMAP_TAG}-${COLMAP_SHA}-openmvs-${OPENMVS_TAG}-${OPENMVS_SHA}" >> $GITHUB_OUTPUT
+
+########################################
+# 2. Build base images per arch
+########################################
+  build-base:
     needs: compute-tag
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build base (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.base
+          push: true
+          platforms: linux/${{ matrix.arch }}
+
+          tags: |
+            ${{ env.IMAGE_NAME }}/colmap-base:${{ matrix.arch }}
+
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}/colmap-base:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}/colmap-base:buildcache-${{ matrix.arch }},mode=max
+
+          provenance: false
+          sbom: false
+
+########################################
+# 3. Build app images per arch
+########################################
+  build:
+    needs: [compute-tag, build-base]
+    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
         include:
+          # CPU builds (both archs)
           - variant: cpu
-            base_image: "ubuntu:24.04"
+            arch: amd64
+            base_image: yeicor/colmap-base:amd64
             cuda_enabled: "0"
+
+          - variant: cpu
+            arch: arm64
+            base_image: yeicor/colmap-base:arm64
+            cuda_enabled: "0"
+
+          # CUDA (amd64 only)
           - variant: cuda
-            base_image: "nvidia/cuda:12.9.1-devel-ubuntu24.04"
+            arch: amd64
+            base_image: nvidia/cuda:12.9.1-devel-ubuntu24.04
             cuda_enabled: "1"
 
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        uses: jlumbroso/free-disk-space@v1
         with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
           docker-images: true
-          swap-storage: true
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@v3
         with:
-          username: "yeicor"
-          password: "${{ secrets.DOCKERHUB_TOKEN }}"
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7
+      - name: Build and push ${{ matrix.variant }}-${{ matrix.arch }}
+        uses: docker/build-push-action@v6
         with:
-          context: "."
-          file: "./Dockerfile"
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.ref == 'refs/heads/main' }}
+
+          platforms: linux/${{ matrix.arch }}
+
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
             CUDA_ENABLED=${{ matrix.cuda_enabled }}
-          push: "${{ github.ref == 'refs/heads/main' }}"
-          tags: |
-            yeicor/colmap-openmvs-${{ matrix.variant }}:${{ needs.compute-tag.outputs.image_tag }}
-            yeicor/colmap-openmvs-${{ matrix.variant }}:latest
-          cache-from: "type=registry,ref=yeicor/colmap-openmvs-${{ matrix.variant }}:buildcache"
-          cache-to: "type=registry,ref=yeicor/colmap-openmvs-${{ matrix.variant }}:buildcache,mode=max"
 
+          tags: |
+            ${{ env.IMAGE_NAME }}/colmap-openmvs-${{ matrix.variant }}:${{ needs.compute-tag.outputs.image_tag }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}/colmap-openmvs-${{ matrix.variant }}:latest-${{ matrix.arch }}
+
+          cache-from: |
+            type=registry,ref=${{ env.IMAGE_NAME }}/colmap-openmvs-${{ matrix.variant }}:buildcache-${{ matrix.arch }}
+            type=registry,ref=${{ env.IMAGE_NAME }}/colmap-base:buildcache-${{ matrix.arch }}
+
+          cache-to: |
+            type=registry,ref=${{ env.IMAGE_NAME }}/colmap-openmvs-${{ matrix.variant }}:buildcache-${{ matrix.arch }},mode=max
+
+          provenance: false
+          sbom: false
+
+########################################
+# 4. Create multi-arch manifests
+########################################
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create CPU multi-arch manifest
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE_NAME }}/colmap-openmvs-cpu:${{ needs.compute-tag.outputs.image_tag }} \
+            -t ${{ env.IMAGE_NAME }}/colmap-openmvs-cpu:latest \
+            ${{ env.IMAGE_NAME }}/colmap-openmvs-cpu:${{ needs.compute-tag.outputs.image_tag }}-amd64 \
+            ${{ env.IMAGE_NAME }}/colmap-openmvs-cpu:${{ needs.compute-tag.outputs.image_tag }}-arm64
+
+      - name: Create CUDA manifest (amd64 only)
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE_NAME }}/colmap-openmvs-cuda:${{ needs.compute-tag.outputs.image_tag }} \
+            -t ${{ env.IMAGE_NAME }}/colmap-openmvs-cuda:latest \
+            ${{ env.IMAGE_NAME }}/colmap-openmvs-cuda:${{ needs.compute-tag.outputs.image_tag }}-amd64
