@@ -1,35 +1,43 @@
-# syntax=docker/dockerfile:1.7-labs
-ARG BASE_IMAGE=ubuntu:24.04
-FROM ${BASE_IMAGE}
+# syntax=docker/dockerfile:1.12
+FROM ubuntu:24.04
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV VCPKG_ROOT=/opt/vcpkg
+ENV DEBIAN_FRONTEND=noninteractive \
+    VCPKG_ROOT=/opt/vcpkg \
+    CC=gcc CXX=g++
 
-RUN --mount=type=cache,target=/var/cache/apt \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        ninja-build \
-        git \
-        curl \
-        jq \
-        zip unzip tar \
-        pkg-config \
-        python3 python3-venv python3-pip \
-        gfortran \
-        autoconf autoconf-archive automake bison \
-        libtool libltdl-dev nasm \
-        libgl-dev libglu1-mesa-dev \
-        libxmu-dev libdbus-1-dev libxtst-dev \
-        libxi-dev libxinerama-dev libxcursor-dev xorg-dev \
+        build-essential cmake ninja-build git curl zip unzip tar \
+        pkg-config python3 python3-venv gfortran \
+        autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
+        libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
+        libxi-dev libxinerama-dev libxcursor-dev xorg-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 🔥 install sccache
-RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.14.0/sccache-v0.14.0-aarch64-unknown-linux-musl.tar.gz \
-    | tar xz && mv sccache-*/sccache /usr/local/bin/
+RUN set -eu; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64)  sccache_arch="x86_64-unknown-linux-musl" ;; \
+        aarch64) sccache_arch="aarch64-unknown-linux-musl" ;; \
+        *) echo "Unsupported arch: $arch" && exit 1 ;; \
+    esac; \
+    curl -fSL "https://github.com/mozilla/sccache/releases/download/v0.9.0/sccache-v0.9.0-${sccache_arch}.tar.gz" -o sccache.tar.gz \
+    && tar xzf sccache.tar.gz --strip-components=1 \
+    && mv sccache /usr/local/bin/sccache \
+    && chmod +x /usr/local/bin/sccache \
+    && rm -f sccache.tar.gz
 
-# vcpkg
-COPY vcpkg ${VCPKG_ROOT}
-RUN ${VCPKG_ROOT}/bootstrap-vcpkg.sh -disableMetrics
+RUN git clone --depth 1 --filter=blob:none https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}" \
+    && cd "${VCPKG_ROOT}" && ./bootstrap-vcpkg.sh -disableMetrics \
+    && rm -rf "${VCPKG_ROOT}/.git"
 
-ENV PATH="/usr/local/bin:${PATH}"
+ENV VCPKG_ROOT=/opt/vcpkg \
+    PATH=/opt/vcpkg:$PATH \
+    SCCACHE_DIR=/cache/sccache \
+    SCCACHE_CACHE_SIZE=20G
+
+LABEL org.opencontainers.image.title="colmap-base" \
+      org.opencontainers.image.description="Base image with vcpkg and sccache for COLMAP+OpenMVS builds" \
+      org.opencontainers.image.vendor="COLMAP+OpenMVS" \
+      org.opencontainers.image.version="1.0"
