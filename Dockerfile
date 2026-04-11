@@ -75,6 +75,7 @@ RUN --mount=type=cache,target=/cache/vcpkg \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
+        -DOpenMVS_BUILD_VIEWER=OFF \
     && cmake --build openMVS/build -j$(nproc) \
     && cmake --install openMVS/build
 
@@ -84,7 +85,7 @@ RUN --mount=type=cache,target=/cache/vcpkg \
 FROM ubuntu:24.04 AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libstdc++6 libgcc-s1 \
+        libstdc++6 libgcc-s1 gfortran ca-certificates \
         libgl1 libglu1-mesa \
         libx11-6 libxext6 libxrender1 \
         libxi6 libxrandr2 libxcursor1 \
