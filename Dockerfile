@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build tools and system dependencies required by vcpkg ports
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git pkg-config gfortran \
+        build-essential cmake git pkg-config gfortran \
         ca-certificates curl zip unzip tar python3 \
         autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
         libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
@@ -38,7 +38,6 @@ RUN cmake -S colmap -B colmap/build \
         -DCUDA_ENABLED=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DTESTS_ENABLED=OFF \
-        -GNinja \
     && cmake --build colmap/build \
     && cmake --install colmap/build
 
@@ -52,7 +51,6 @@ RUN cmake -S openMVS -B openMVS/build \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
-        -GNinja \
     && cmake --build openMVS/build \
     && cmake --install openMVS/build
 
