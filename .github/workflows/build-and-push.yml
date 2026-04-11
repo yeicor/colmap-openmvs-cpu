@@ -1,211 +1,50 @@
-name: Build and Push
-
 on:
+  # Trigger the action manually from the UI
   workflow_dispatch:
-    inputs:
-      force-rebuild:
-        description: 'Force rebuild all stages'
-        type: boolean
-        default: false
+  # Trigger the action when pushing to certain branches
   push:
-    branches: [main]
-    tags: ['v*']
   pull_request:
-    branches: [main]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  REGISTRY: docker.io
 
 jobs:
-  image-metadata:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.meta.outputs.tag }}
-      is_main: ${{ steps.meta.outputs.is_main }}
-      is_tag: ${{ steps.meta.outputs.is_tag }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - id: meta
-        run: |
-          set -euo pipefail
-
-          DATE="$(date +'%Y%m%d')"
-          SHORT_SHA="${GITHUB_SHA:0:8}"
-
-          COLMAP_TAG="$(git -C colmap describe --tags --abbrev=0 2>/dev/null || echo 'v0.0')"
-          COLMAP_VER="${COLMAP_TAG#v}"
-          COLMAP_SHA="$(git -C colmap rev-parse --short HEAD || echo '0000')"
-
-          OPENMVS_TAG="$(git -C openMVS describe --tags --abbrev=0 2>/dev/null || echo 'v0.0')"
-          OPENMVS_VER="${OPENMVS_TAG#v}"
-          OPENMVS_SHA="$(git -C openMVS rev-parse --short HEAD || echo '0000')"
-
-          TAG="${DATE}-colmap${COLMAP_VER}-${COLMAP_SHA}-openmvs${OPENMVS_VER}-${OPENMVS_SHA}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            echo "is_main=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_main=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "is_tag=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_tag=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  build-base:
-    needs: image-metadata
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: yeicor
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - uses: imranmsc/clear-actions-cache@v1
-        if: ${{ inputs.force-rebuild }}
-
-      - name: Build base image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.base
-          push: ${{ needs.image-metadata.outputs.is_tag == 'true' || needs.image-metadata.outputs.is_main == 'true' }}
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            yeicor/colmap-base:latest
-            yeicor/colmap-base:${{ needs.image-metadata.outputs.tag }}
-          cache-from: type=gha,scope=base
-          cache-to: type=gha,scope=base,mode=max
-          provenance: false
-          sbom: true
-
-  build-app:
-    needs: [image-metadata, build-base]
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-      id-token: write
+  build-and-push:
+    runs-on: "ubuntu-latest"
     strategy:
       fail-fast: false
       matrix:
         include:
-          - variant: cpu
-            platforms: linux/amd64,linux/arm64
-            base: yeicor/colmap-base:latest
-            cuda: "0"
-          - variant: cuda
-            platforms: linux/amd64
-            base: nvidia/cuda:12.9.1-devel-ubuntu24.04
-            cuda: "1"
-
+          - cuda_enabled: "0"
+            prefix: "cpu"
+          - cuda_enabled: "1"
+            prefix: "cuda"
     steps:
-      - uses: actions/checkout@v4
+      - uses: "actions/checkout@v6"
         with:
-          submodules: recursive
-          fetch-depth: 0
+          submodules: "recursive"
 
-      - uses: imranmsc/clear-actions-cache@v1
-        if: ${{ inputs.force-rebuild }}
+      - run: |
+          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          IMAGE_DATE="$(date +'%Y-%m-%d')"
+          git submodule foreach --recursive 'git fetch --tags'
+          COLMAP_DESC="$(git -C colmap tag --list --sort=-authordate | head -n 1)-$(git -C colmap rev-parse --short HEAD)"
+          OPENMVS_DESC="$(git -C openMVS tag --list --sort=-authordate | head -n 1)-$(git -C openMVS rev-parse --short HEAD)"
+          echo "IMAGE_TAG=${IMAGE_DATE}-colmap-${COLMAP_DESC}-openmvs-${OPENMVS_DESC}" >> $GITHUB_ENV
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: "docker/setup-buildx-action@v4"
 
-      - uses: docker/login-action@v3
+      - uses: "docker/login-action@v4"
         with:
-          username: yeicor
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: "yeicor"
+          password: "${{ secrets.DOCKERHUB_TOKEN }}"
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - uses: "docker/build-push-action@v7"
         with:
-          context: .
-          file: ./Dockerfile
-          push: ${{ needs.image-metadata.outputs.is_tag == 'true' || needs.image-metadata.outputs.is_main == 'true' }}
-          platforms: ${{ matrix.platforms }}
+          context: "."
+          file: "./Dockerfile"
           build-args: |
-            BASE_IMAGE=${{ matrix.base }}
-            CUDA_ENABLED=${{ matrix.cuda }}
+            CUDA_ENABLED=${{ matrix.cuda_enabled }}
+          push: "${{ github.ref == 'refs/heads/main' }}"
           tags: |
-            yeicor/colmap-openmvs-${{ matrix.variant }}:${{ needs.image-metadata.outputs.tag }}
-            yeicor/colmap-openmvs-${{ matrix.variant }}:latest
-          cache-from: type=gha,scope=${{ matrix.variant }}
-          cache-to: type=gha,scope=${{ matrix.variant }},mode=max
-          provenance: true
-          sbom: true
-
-      - name: Extract debug artifacts
-        if: ${{ !cancelled() && !success() }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          target: debug-artifacts
-          outputs: type=local,dest=./debug-${{ matrix.variant }}
-          build-args: |
-            BASE_IMAGE=${{ matrix.base }}
-            CUDA_ENABLED=${{ matrix.cuda }}
-
-      - name: Upload debug artifacts
-        if: ${{ !cancelled() && !success() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-${{ matrix.variant }}
-          path: ./debug-${{ matrix.variant }}
-          retention-days: 7
-
-  debug-logs:
-    needs: [image-metadata, build-app]
-    runs-on: ubuntu-latest
-    if: failure()
-    steps:
-      - name: Show failure summary
-        run: |
-          echo "## Build Failed" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Check the attached debug artifacts for vcpkg buildtrees and logs." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Common issues:" >> "$GITHUB_STEP_SUMMARY"
-          echo "1. Missing system dependencies - check apt install in Dockerfile.base" >> "$GITHUB_STEP_SUMMARY"
-          echo "2. vcpkg triplet issues - verify x64-linux works for your platform" >> "$GITHUB_STEP_SUMMARY"
-          echo "3. CUDA architecture - try CUDA_ARCHITECTURES=75" >> "$GITHUB_STEP_SUMMARY"
-
-  verify:
-    needs: [image-metadata, build-app]
-    runs-on: ubuntu-latest
-    if: ${{ needs.image-metadata.outputs.is_tag == 'true' }}
-    steps:
-      - name: Verify images work
-        run: |
-          for variant in cpu cuda; do
-            IMG="yeicor/colmap-openmvs-$variant:${{ needs.image-metadata.outputs.tag }}"
-            echo "Verifying $IMG..."
-            docker pull "$IMG" || continue
-
-            if [ "$variant" = "cuda" ]; then
-              docker run --rm --gpus all "$IMG" --help 2>&1 | head -5 || true
-            else
-              docker run --rm "$IMG" --help 2>&1 | head -5 || true
-            fi
-          done
+            ${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-latest
+          cache-from: "type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-buildcache"
+          cache-to: "type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.prefix }}-buildcache,mode=max"
