@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: yeicor
   REGISTRY: docker.io
 
 jobs:
@@ -39,7 +38,7 @@ jobs:
           set -euo pipefail
           DATE="$(date +'%Y%m%d')"
           SHORT_SHA="${GITHUB_SHA:0:8}"
-          HASH_SHA="$(echo $SHORT_SHA$(git rev-parse --short HEAD | head -c 4)$(date +%H%M)"
+          HASH_SHA="$(echo $SHORT_SHA$(git rev-parse --short HEAD | head -c 4)$(date +%H%M))"
 
           COLMAP_TAG="$(git -C colmap describe --tags --abbrev=0 2>/dev/null || echo 'v0.0')"
           COLMAP_VER="${COLMAP_TAG#v}"
