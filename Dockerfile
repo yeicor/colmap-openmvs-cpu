@@ -1,57 +1,153 @@
-FROM archlinux:base-devel-20260329.0.507017
+# syntax=docker/dockerfile:1.12
+# Unified Dockerfile for COLMAP + OpenMVS
+# Supports both CPU (ubuntu) and CUDA builds via --build-arg variants
 
-# Install system dependencies (build and runtime)
-RUN sudo pacman -Syu --noconfirm --needed git && useradd -m builduser && echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && sudo -u builduser bash -c "cd /tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
-RUN sudo -u builduser bash -c "yay -Syu --noconfirm --needed sudo git cmake libpng libjpeg-turbo libjxl libtiff glu glew glfw-x11 python git cmake ninja flann freeimage google-glog gtest gmock sqlite glew qt6-base gambas3-gb-qt6-opengl vtk boost boost-libs opencv cgal openimageio eigen3 suitesparse"
-RUN mkdir -p /build # Otherwise docker cache fails?!
+###############################################################################
+# Stage 1: Base - Build tools, vcpkg, sccache
+###############################################################################
+# Arguments to switch between CPU and CUDA base images
+ARG BASE_IMAGE=nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04 # or ubuntu:24.04 for CPU
+
+FROM ${BASE_IMAGE} AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    VCPKG_ROOT=/opt/vcpkg \
+    VCPKG_DEFAULT_TRIPLET=x64-linux \
+    VCPKG_INSTALLED_DIR=/build/vcpkg_installed \
+    CC=gcc CXX=g++
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake ninja-build git curl zip unzip tar \
+        pkg-config python3 python3-venv gfortran \
+        autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
+        libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
+        libxi-dev libxinerama-dev libxcursor-dev xorg-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64)  sccache_arch="x86_64-unknown-linux-musl" ;; \
+        aarch64) sccache_arch="aarch64-unknown-linux-musl" ;; \
+        *) echo "Unsupported arch: $arch" && exit 1 ;; \
+    esac; \
+    curl -fSL "https://github.com/mozilla/sccache/releases/download/v0.9.0/sccache-v0.9.0-${sccache_arch}.tar.gz" -o sccache.tar.gz \
+    && tar xzf sccache.tar.gz --strip-components=1 \
+    && mv sccache /usr/local/bin/sccache \
+    && chmod +x /usr/local/bin/sccache \
+    && rm -f sccache.tar.gz
+
+RUN git clone --depth 1 --filter=blob:none https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}" \
+    && cd "${VCPKG_ROOT}" && ./bootstrap-vcpkg.sh -disableMetrics \
+    && rm -rf "${VCPKG_ROOT}/.git"
+
+ENV VCPKG_ROOT=/opt/vcpkg \
+    PATH=/opt/vcpkg:$PATH \
+    SCCACHE_DIR=/cache/sccache \
+    SCCACHE_CACHE_SIZE=20G
+
+###############################################################################
+# Stage 2: Builder - Compile COLMAP and OpenMVS
+###############################################################################
+FROM base AS builder
+
+ARG CUDA_ENABLED=ON
+ARG CUDA_ARCHITECTURES=all-major
+
+ENV DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /build
 
-# Copy and build gklib and metis git submodules (colmap likes gklib statically compiled within libmetis.so)
-COPY gklib gklib
-RUN cd gklib && CFLAGS="-fPIC" make config cc=gcc prefix=/usr && make install && cd ..
-COPY metis metis
-RUN cd metis && echo "target_link_libraries(metis libGKlib.a)" >> libmetis/CMakeLists.txt && \
-    make config cc=gcc prefix=/usr shared=1 gklib_path=/usr && make install && cd ..
+COPY --chmod=755 colmap colmap
 
-# Copy and build nanoflann (required for openMVS)
-COPY nanoflann nanoflann
-RUN cd nanoflann && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
+# Pre-install the Boost headers/meta-port so that boost/config.hpp is present
+# when vcpkg builds boost-filesystem and other Boost components.
+# Without this, CUDA base images (which differ from plain ubuntu:24.04) can
+# cause a try-compile failure: "fatal error: boost/config.hpp: No such file
+# or directory".  Installing the 'boost' meta-port first guarantees the core
+# headers land in VCPKG_INSTALLED_DIR before any dependent port is built.
+RUN ${VCPKG_ROOT}/vcpkg install boost \
+    --triplet x64-linux \
+    --x-install-root=${VCPKG_INSTALLED_DIR}
 
-# Copy and build tinyxml2 (required for TinyEXIF)
-COPY tinyxml2 tinyxml2
-RUN cd tinyxml2 && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON && cmake --build build && cmake --install build
+RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
+    sccache --zero-stats 2>/dev/null || true \
+    && cmake -S colmap -B colmap/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
+        -DVCPKG_TARGET_TRIPLET=x64-linux \
+        -DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR} \
+        -DGUI_ENABLED=OFF \
+        -DCUDA_ENABLED=${CUDA_ENABLED} \
+        -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+        -DTESTS_ENABLED=OFF \
+        -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+    && cmake --build colmap/build -j$(nproc) \
+    && cmake --install colmap/build --prefix /build/install \
+    && sccache --show-stats || (find /opt/vcpkg/buildtrees -name "*.log" -exec cat {} \; 2>/dev/null; exit 1)
 
-# Copy and build TinyEXIF (required for openMVS)
-COPY TinyEXIF TinyEXIF
-RUN cd TinyEXIF && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
+COPY --chmod=755 openMVS openMVS
 
-# Copy and build TinyNPY (required for openMVS)
-COPY TinyNPY TinyNPY
-RUN cd TinyNPY && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
+RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
+    sccache --zero-stats 2>/dev/null || true \
+    && cmake -S openMVS -B openMVS/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
+        -DVCPKG_TARGET_TRIPLET=x64-linux \
+        -DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR} \
+        -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
+        -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+        -DOpenMVS_USE_PYTHON=OFF \
+        -DOpenMVS_BUILD_VIEWER=OFF \
+        -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+    && cmake --build openMVS/build -j$(nproc) \
+    && cmake --install openMVS/build --prefix /build/install \
+    && sccache --show-stats || (find /opt/vcpkg/buildtrees -name "*.log" -exec cat {} \; 2>/dev/null; exit 1)
 
-# Copy and build VCG (required for openMVS)
-COPY VCG VCG
-RUN cd VCG && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build && cmake --install build
-    
-# Copy and build openMVS git submodule (required for colmap)
-COPY openMVS openMVS
-RUN sed -E -i 's/FIND_PACKAGE\(Boost REQUIRED COMPONENTS ([^)]*)\bsystem\b ? ([^)]*)\)/FIND_PACKAGE(Boost REQUIRED COMPONENTS \1\2)/g' openMVS/CMakeLists.txt  # https://bbs.archlinux.org/viewtopic.php?id=309669
-RUN cd openMVS && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DOpenMVS_USE_PYTHON=OFF -DVCG_ROOT=$(realpath ../VCG) -GNinja && cmake --build build && cmake --install build
-ENV PATH=/usr/local/bin/OpenMVS:$PATH
+RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true \
+    && find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true \
+    && find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null || true
 
-# Copy and build ceres-solver (required for colmap)
-COPY ceres-solver ceres-solver
-RUN cd ceres-solver && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DSUITESPARSE=ON && cmake --build build && cmake --install build
+###############################################################################
+# Stage 3: Runtime - Minimal image for the final container
+###############################################################################
+# Reuses the same BASE_IMAGE as the build stages to guarantee ABI compatibility
+# (e.g., matching CUDA runtime libraries).  Pass BASE_IMAGE=ubuntu:24.04 for a
+# CPU-only image, or keep the default nvidia/cuda devel image for CUDA support.
+FROM ${BASE_IMAGE} AS runtime
 
-# Copy and build colmap git submodule
-COPY colmap colmap
-RUN cd colmap && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -GNinja && cmake --build build && cmake --install build
+ENV DEBIAN_FRONTEND=noninteractive \
+    PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
+    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu
 
-# Cleanup stuff
-WORKDIR /
-RUN rm -rf /build
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        libstdc++6 libgcc-s1 libgfortran5 ca-certificates \
+        libgl1 libglu1-mesa \
+        libx11-6 libxext6 libxrender1 \
+        libxi6 libxrandr2 libxcursor1 \
+        libxinerama1 libxtst6 libdbus-1-3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ldconfig
 
-# Set entrypoint
-COPY entrypoint.sh entrypoint.sh
-RUN chmod 0777 entrypoint.sh
-ENTRYPOINT ["./entrypoint.sh"]
+COPY --from=builder /build/install /usr/local
+COPY --from=builder /build/vcpkg_installed/x64-linux/lib /usr/local/lib/
+COPY --from=builder /build/vcpkg_installed/x64-linux/share /usr/local/share/
+COPY --from=builder /build/vcpkg_installed/x64-linux/include /usr/local/include/
+
+RUN ldconfig
+
+COPY --chmod=755 entrypoint.sh /entrypoint.sh
+
+LABEL org.opencontainers.image.title="colmap-openmvs" \
+      org.opencontainers.image.description="COLMAP + OpenMVS: SfM and MVS pipeline" \
+      org.opencontainers.image.vendor="COLMAP+OpenMVS" \
+      org.opencontainers.image.source="https://github.com/yeicor/colmap-openmvs"
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["--help"]
