@@ -116,7 +116,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
         libstdc++6 libgcc-s1 libgfortran5 ca-certificates \
-        libgl1 libglu1-mesa libboost \
+        libgl1 libglu1-mesa libboost-dev \
         libx11-6 libxext6 libxrender1 \
         libxi6 libxrandr2 libxcursor1 \
         libxinerama1 libxtst6 libdbus-1-3 \
