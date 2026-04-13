@@ -1,82 +1,131 @@
 on:
   workflow_dispatch:
   push:
+    branches: [main]
   pull_request:
 
-jobs:
-  build-and-push:
-    runs-on: "ubuntu-latest"
-    steps:
-      - uses: "actions/checkout@v6"
-        with:
-          submodules: "recursive"
+env:
+  REGISTRY_IMAGE: ${{ github.repository }}
 
-      - name: Build tag
-        id: build_tag
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.tag }}
+      is_push: ${{ steps.meta.outputs.is_push }}
+
+    steps:
+      - name: Compute metadata
+        id: meta
         run: |
           IMAGE_DATE="$(date +'%Y-%m-%d')"
-          SHORT_SHA="$(git rev-parse --short HEAD)"
-          echo "TAG=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "IS_MAIN=${{ github.ref == 'refs/heads/main' }}" >> $GITHUB_OUTPUT
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          echo "tag=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "image=$(echo ${{ env.REGISTRY_IMAGE }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "is_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_push=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [cpu, cuda]
+        arch: [amd64, arm64]
+
+        include:
+          # Native runners
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            arch_tag: amd64
+
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch_tag: arm64
+
+          # Variants
+          - variant: cpu
+            BASE_IMAGE: ubuntu:24.04
+            RUNTIME_IMAGE: ubuntu:24.04
+            CUDA_ENABLED: OFF
+            tag_prefix: cpu
+
+          - variant: cuda
+            BASE_IMAGE: nvidia/cuda:12.9.1-devel-ubuntu24.04
+            RUNTIME_IMAGE: nvidia/cuda:12.9.1-runtime-ubuntu24.04
+            CUDA_ENABLED: ON
+            tag_prefix: cuda
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Login to Docker Hub
-        if: steps.build_tag.outputs.IS_MAIN == 'true'
-        uses: "docker/login-action@v4"
+        if: needs.meta.outputs.is_push == 'true'
+        uses: docker/login-action@v4
         with:
-          username: "${{ github.repository_owner }}"
-          password: "${{ secrets.DOCKERHUB_TOKEN }}"
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        id: setup-buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Cache
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: cache-mount
-          key: cache-mount-${{ hashFiles('Dockerfile') }}
-
-      - name: Restore Docker cache mounts
-        uses: reproducible-containers/buildkit-cache-dance@v3
-        with:
-          builder: ${{ steps.setup-buildx.outputs.name }}
-          cache-dir: cache-mount
-          dockerfile: Dockerfile
-          skip-extraction: ${{ steps.cache.outputs.cache-hit }}
-
-      - name: Build and push
+      - name: Build (and push if main)
         uses: docker/build-push-action@v7
         with:
           context: .
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          push: ${{ steps.build_tag.outputs.IS_MAIN == 'true' }}
-          platforms: linux/amd64 #,linux/arm64
-          build-args: |
-            BASE_IMAGE=ubuntu:24.04
-            RUNTIME_IMAGE=ubuntu:24.04
-            CUDA_ENABLED=OFF
-          tags: |
-            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }}
-            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cpu-latest
+          push: ${{ needs.meta.outputs.is_push == 'true' }}
+          platforms: ${{ matrix.platform }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          push: ${{ steps.build_tag.outputs.IS_MAIN == 'true' }}
-          platforms: linux/amd64 #,linux/arm64
+          # 🚀 Shared registry cache
+          cache-from: |
+            type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
+          cache-to: |
+            type=registry,ref=${{ needs.meta.outputs.image }}:buildcache,mode=max
+
           build-args: |
-            BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu24.04
-            RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu24.04
-            CUDA_ENABLED=ON
+            BASE_IMAGE=${{ matrix.BASE_IMAGE }}
+            RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
+            CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
+
+          provenance: true
+          sbom: true
+
           tags: |
-            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }}
-            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cuda-latest
+            ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}
+
+  manifest:
+    needs: [meta, build]
+    if: needs.meta.outputs.is_push == 'true'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create multi-arch manifests
+        run: |
+          for variant in cpu cuda; do
+            docker buildx imagetools create \
+              -t ${IMAGE}:${variant}-${TAG} \
+              -t ${IMAGE}:${variant}-latest \
+              ${IMAGE}:${variant}-${TAG}-amd64 \
+              ${IMAGE}:${variant}-${TAG}-arm64
+          done
+        env:
+          IMAGE: ${{ needs.meta.outputs.image }}
+          TAG: ${{ needs.meta.outputs.tag }}

@@ -62,7 +62,7 @@ RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
     && cmake -S colmap -B colmap/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
-        -DVCPKG_TARGET_TRIPLET=x64-linux \
+        -DVCPKG_TARGET_TRIPLET=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release \
         -DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR} \
         -DGUI_ENABLED=OFF \
         -DCUDA_ENABLED=${CUDA_ENABLED} \
@@ -81,7 +81,7 @@ RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
     && cmake -S openMVS -B openMVS/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
-        -DVCPKG_TARGET_TRIPLET=x64-linux \
+        -DVCPKG_TARGET_TRIPLET=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release \
         -DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR} \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
