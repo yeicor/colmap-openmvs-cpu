@@ -14,7 +14,6 @@ jobs:
       image: ${{ steps.meta.outputs.image }}
       tag: ${{ steps.meta.outputs.tag }}
       is_push: ${{ steps.meta.outputs.is_push }}
-
     steps:
       - name: Compute metadata
         id: meta
@@ -38,93 +37,102 @@ jobs:
       matrix:
         variant: [cpu, cuda]
         arch: [amd64, arm64]
-
         include:
           # Native runners
           - arch: amd64
             runner: ubuntu-24.04
             platform: linux/amd64
             arch_tag: amd64
-
           - arch: arm64
             runner: ubuntu-24.04-arm
             platform: linux/arm64
             arch_tag: arm64
-
           # Variants
           - variant: cpu
             BASE_IMAGE: ubuntu:24.04
             RUNTIME_IMAGE: ubuntu:24.04
             CUDA_ENABLED: OFF
             tag_prefix: cpu
-
           - variant: cuda
             BASE_IMAGE: nvidia/cuda:12.9.1-devel-ubuntu24.04
             RUNTIME_IMAGE: nvidia/cuda:12.9.1-runtime-ubuntu24.04
             CUDA_ENABLED: ON
             tag_prefix: cuda
-
     runs-on: ${{ matrix.runner }}
-
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-
       - name: Login to Docker Hub
         if: needs.meta.outputs.is_push == 'true'
         uses: docker/login-action@v4
         with:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
-
       - name: Build (and push if main)
         uses: docker/build-push-action@v7
         with:
           context: .
           push: ${{ needs.meta.outputs.is_push == 'true' }}
           platforms: ${{ matrix.platform }}
-
-          # 🚀 Shared registry cache
-          cache-from: |
-            type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
-          cache-to: |
-            type=registry,ref=${{ needs.meta.outputs.image }}:buildcache,mode=max
-
+          cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
+          cache-to: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache,mode=max
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
             CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
-
           provenance: true
           sbom: true
-
-          tags: |
-            ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}
+          tags: ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}-untested
+  
+  test:
+    needs: [meta, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Download Buddha dataset
+        run: |
+          git clone --depth 1 https://github.com/alicevision/dataset_buddha.git
+          mkdir -p data
+          cp -r dataset_buddha/buddha_mini6 data/
+      - name: Prepare dataset structure
+        run: |
+          mkdir -p test_obj/images
+          cp data/buddha_mini6/*.jpg test_obj/images/
+      - name: Run pipeline (CPU only for CI)
+        run: |
+          docker run --rm \
+            -v $PWD/test_obj:/data \
+            ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-amd64 \
+            /data
+      - name: Upload results (fail if missing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset_buddha-test-output
+          path: test_obj/openmvs/scene_dense_mesh_refined_textured.*
+          if-no-files-found: error
 
   manifest:
-    needs: [meta, build]
+    needs: [meta, test]
     if: needs.meta.outputs.is_push == 'true'
     runs-on: ubuntu-24.04
-
     steps:
       - name: Login to Docker Hub
         uses: docker/login-action@v4
         with:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Create multi-arch manifests
         run: |
           for variant in cpu cuda; do
             docker buildx imagetools create \
               -t ${IMAGE}:${variant}-${TAG} \
               -t ${IMAGE}:${variant}-latest \
-              ${IMAGE}:${variant}-${TAG}-amd64 \
-              ${IMAGE}:${variant}-${TAG}-arm64
+              ${IMAGE}:${variant}-${TAG}-amd64-untested \
+              ${IMAGE}:${variant}-${TAG}-arm64-untested
           done
         env:
           IMAGE: ${{ needs.meta.outputs.image }}

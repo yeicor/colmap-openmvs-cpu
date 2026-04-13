@@ -51,14 +51,17 @@ ENV VCPKG_ROOT=/opt/vcpkg \
     SCCACHE_DIR=/cache/sccache \
     SCCACHE_CACHE_SIZE=20G
 
-ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /build
 
 COPY --chmod=755 colmap colmap
 
+RUN 
 RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
     sccache --zero-stats 2>/dev/null || true \
+    && if [ "$(uname -m)" = "aarch64" ]; then \
+      export CMAKE_CONFIGURE_OPTIONS="-DOPENEXR_IMF_HAVE_GCC_INLINE_ASM_AVX=OFF -DIEX_HAVE_CONTROL_REGISTER_SUPPORT=OFF -DIEX_HAVE_SIGCONTEXT_CONTROL_REGISTER_SUPPORT=OFF"; \
+    fi \
     && cmake -S colmap -B colmap/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
@@ -70,6 +73,7 @@ RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
         -DTESTS_ENABLED=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=sccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+        ${CMAKE_CONFIGURE_OPTIONS:-} \
     && cmake --build colmap/build -j$(nproc) \
     && cmake --install colmap/build --prefix /build/install \
     && sccache --show-stats || (find /opt/vcpkg/buildtrees -name "*.log" -exec cat {} \; 2>/dev/null; exit 1)
