@@ -6,7 +6,10 @@
 # Stage 1: Base - Build tools, vcpkg, sccache
 ###############################################################################
 # Arguments to switch between CPU and CUDA base images
-ARG BASE_IMAGE=nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04 # or ubuntu:24.04 for CPU
+ARG BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu22.04 # or ubuntu:24.04 for CPU
+ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu22.04 # or ubuntu:24.04 for CPU
+ARG CUDA_ENABLED=ON
+ARG CUDA_ARCHITECTURES=all-major
 
 FROM ${BASE_IMAGE} AS base
 
@@ -20,7 +23,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build git curl zip unzip tar \
-        pkg-config python3 python3-venv gfortran libboost-dev \
+        pkg-config python3 python3-venv gfortran \
         autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
         libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
         libxi-dev libxinerama-dev libxcursor-dev xorg-dev ca-certificates \
@@ -33,7 +36,7 @@ RUN set -eu; \
         aarch64) sccache_arch="aarch64-unknown-linux-musl" ;; \
         *) echo "Unsupported arch: $arch" && exit 1 ;; \
     esac; \
-    curl -fSL "https://github.com/mozilla/sccache/releases/download/v0.9.0/sccache-v0.9.0-${sccache_arch}.tar.gz" -o sccache.tar.gz \
+    curl -fSL "https://github.com/mozilla/sccache/releases/download/v0.14.0/sccache-v0.14.0-${sccache_arch}.tar.gz" -o sccache.tar.gz \
     && tar xzf sccache.tar.gz --strip-components=1 \
     && mv sccache /usr/local/bin/sccache \
     && chmod +x /usr/local/bin/sccache \
@@ -47,14 +50,6 @@ ENV VCPKG_ROOT=/opt/vcpkg \
     PATH=/opt/vcpkg:$PATH \
     SCCACHE_DIR=/cache/sccache \
     SCCACHE_CACHE_SIZE=20G
-
-###############################################################################
-# Stage 2: Builder - Compile COLMAP and OpenMVS
-###############################################################################
-FROM base AS builder
-
-ARG CUDA_ENABLED=ON
-ARG CUDA_ARCHITECTURES=all-major
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -103,10 +98,9 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
     && find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null || true
 
 ###############################################################################
-# Stage 3: Runtime - Minimal image for the final container
+# Stage 2: Runtime - Minimal image for the final container
 ###############################################################################
-# Use runtime-cuda by default, but allow switching via target
-FROM ${BASE_IMAGE} AS runtime
+FROM ${RUNTIME_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \

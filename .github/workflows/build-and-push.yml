@@ -17,30 +17,66 @@ jobs:
           IMAGE_DATE="$(date +'%Y-%m-%d')"
           SHORT_SHA="$(git rev-parse --short HEAD)"
           echo "TAG=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "IS_MAIN=${{ github.ref == 'refs/heads/main' }}" >> $GITHUB_ENV
+          echo "DOCKER_IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "IS_MAIN=${{ github.ref == 'refs/heads/main' }}" >> $GITHUB_OUTPUT
 
       - name: Login to Docker Hub
-        if: env.IS_MAIN == 'true'
+        if: steps.build_tag.outputs.IS_MAIN == 'true'
         uses: "docker/login-action@v4"
         with:
-          username: "yeicor"
+          username: "${{ github.repository_owner }}"
           password: "${{ secrets.DOCKERHUB_TOKEN }}"
 
-      - name: Build CPU image
-        run: |
-          DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=ubuntu:24.04 --build-arg CUDA_ENABLED=OFF -t ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} .
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
 
-      - name: Build CUDA image
-        run: |
-          DOCKER_BUILDKIT=1 docker build -t ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} .
+      - name: Set up Docker Buildx
+        id: setup-buildx
+        uses: docker/setup-buildx-action@v4
 
-      - name: Push images
-        if: env.IS_MAIN == 'true'
-        run: |
-          docker push ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }}
-          docker push ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }}
-          docker tag ${{ env.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }} ${{ env.DOCKER_IMAGE_NAME }}:cpu-latest
-          docker tag ${{ env.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }} ${{ env.DOCKER_IMAGE_NAME }}:cuda-latest
-          docker push ${{ env.DOCKER_IMAGE_NAME }}:cpu-latest
-          docker push ${{ env.DOCKER_IMAGE_NAME }}:cuda-latest
+      - name: Cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: cache-mount
+          key: cache-mount-${{ hashFiles('Dockerfile') }}
+
+      - name: Restore Docker cache mounts
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: cache-mount
+          dockerfile: Dockerfile
+          skip-extraction: ${{ steps.cache.outputs.cache-hit }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          push: steps.build_tag.outputs.IS_MAIN == 'true'
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BASE_IMAGE=ubuntu:24.04
+            RUNTIME_IMAGE=ubuntu:24.04
+            CUDA_ENABLED=OFF
+          tags: |
+            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cpu-${{ steps.build_tag.outputs.TAG }}
+            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cpu-latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          push: steps.build_tag.outputs.IS_MAIN == 'true'
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu24.04
+            RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu24.04
+            CUDA_ENABLED=ON
+          tags: |
+            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cuda-${{ steps.build_tag.outputs.TAG }}
+            ${{ steps.build_tag.outputs.DOCKER_IMAGE_NAME }}:cuda-latest
