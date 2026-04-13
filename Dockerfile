@@ -11,7 +11,7 @@ ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu22.04 # or ubuntu:24.04 for C
 ARG CUDA_ENABLED=ON
 ARG CUDA_ARCHITECTURES=all-major
 
-FROM ${BASE_IMAGE} AS base
+FROM ${BASE_IMAGE} AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
     VCPKG_ROOT=/opt/vcpkg \
