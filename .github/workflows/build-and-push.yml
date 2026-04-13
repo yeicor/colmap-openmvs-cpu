@@ -55,7 +55,7 @@ jobs:
           context: .
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          push: steps.build_tag.outputs.IS_MAIN == 'true'
+          push: ${{ steps.build_tag.outputs.IS_MAIN == 'true' }}
           platforms: linux/amd64,linux/arm64
           build-args: |
             BASE_IMAGE=ubuntu:24.04
