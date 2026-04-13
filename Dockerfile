@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build git curl zip unzip tar \
-        pkg-config python3 python3-venv gfortran \
+        pkg-config python3 python3-venv gfortran libboost-dev \
         autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
         libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
         libxi-dev libxinerama-dev libxcursor-dev xorg-dev ca-certificates \
@@ -116,7 +116,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
         libstdc++6 libgcc-s1 libgfortran5 ca-certificates \
-        libgl1 libglu1-mesa \
+        libgl1 libglu1-mesa libboost \
         libx11-6 libxext6 libxrender1 \
         libxi6 libxrandr2 libxcursor1 \
         libxinerama1 libxtst6 libdbus-1-3 \
