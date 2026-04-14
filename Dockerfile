@@ -54,6 +54,7 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
+    --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
@@ -81,6 +82,7 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
+    --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     cmake -S openMVS -B openMVS/build -G Ninja \
@@ -93,7 +95,7 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
         -DOpenMVS_USE_PYTHON=OFF \
         -DOpenMVS_BUILD_TOOLS=OFF \
         -DOpenMVS_BUILD_VIEWER=OFF \
-        -DOpenMVS_USE_CERES=ON \
+        -DOpenMVS_ENABLE_TESTS=OFF \
         -DOpenMVS_USE_BREAKPAD=OFF; \
     cmake --build openMVS/build -j$(nproc); \
     cmake --install openMVS/build --prefix /build/install

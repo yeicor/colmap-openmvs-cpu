@@ -77,13 +77,13 @@ jobs:
         with:
           path: cache-mount
           key: cache-mount-${{ hashFiles('Dockerfile') }}
-      - name: Restore Docker cache mounts
+      - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
           cache-dir: cache-mount
           dockerfile: Dockerfile
-          skip-extraction: ${{ steps.cache.outputs.cache-hit }}
+          skip-extraction: true # disable post-step (done manually)
       - name: Build (and push if main)
         uses: docker/build-push-action@v7
         with:
@@ -99,6 +99,15 @@ jobs:
           provenance: true
           sbom: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}-wip
+      - name: Docker cache mounts (extract)
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: cache-mount
+          dockerfile: Dockerfile
+          skip-extraction: true # disable post-step (done here)
+        env:
+          STATE_POST: "true" # Hack to force extract = true for the action
       - name: Upload vcpkg cached data as artifact (for debugging purposes)
         if: always()
         uses: actions/upload-artifact@v4
