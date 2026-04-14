@@ -135,9 +135,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Copy build artifacts
 ###############################################################################
 COPY --from=builder /build/install /usr/local
-COPY --from=builder ${VCPKG_INSTALLED_DIR}/x64-linux/lib /usr/local/lib/
-COPY --from=builder ${VCPKG_INSTALLED_DIR}/x64-linux/share /usr/local/share/
-COPY --from=builder ${VCPKG_INSTALLED_DIR}/x64-linux/include /usr/local/include/
+COPY --from=builder ${VCPKG_INSTALLED_DIR}/*-linux-release/ /usr/local/
 
 RUN ldconfig
 
