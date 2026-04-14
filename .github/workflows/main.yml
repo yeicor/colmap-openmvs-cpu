@@ -85,7 +85,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ needs.meta.outputs.is_push == 'true' }}
           platforms: ${{ matrix.platform }}
           cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
           cache-to: ${{ needs.meta.outputs.is_push == 'true' && format('type=registry,ref={0}:buildcache,mode=max', needs.meta.outputs.image) || ''}}
@@ -93,6 +92,8 @@ jobs:
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
             CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
+          push: false
+          load: true
           provenance: true
           sbom: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
@@ -112,6 +113,12 @@ jobs:
           name: vcpkg-cached-${{ matrix.variant }}-${{ matrix.arch }}
           path: cache-mount
           retention-days: 1
+      - run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip -o docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+          path: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
+          retention-days: 1
 
   test_and_minimize:
     needs: [meta, build]
@@ -128,8 +135,10 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+      - run: docker load -i docker-image-*.tar && rm docker-image-*.tar
       - name: Download Buddha dataset
         run: |
           git clone --depth 1 https://github.com/alicevision/dataset_buddha.git
@@ -155,6 +164,11 @@ jobs:
     needs: [meta, test_and_minimize]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: docker-image-*
+          merge-multiple: true
+      - run: for img in docker-image-*.tar; do docker load -i $img && rm $img; done
       - name: Login to Docker Hub
         # This if is not at the job level to simplify success detection for auto-merge rules.
         if: needs.meta.outputs.is_push == 'true'

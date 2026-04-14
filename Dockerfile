@@ -52,7 +52,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libltdl-dev \
         python3-venv \
         libxi-dev libxtst-dev \
-        libxrandr-dev
+        libxrandr-dev && \
+        # Required for using the GPU in ceres (for colmap's bundle adjustment)
+        curl -Lo archive.tar.xz "https://developer.download.nvidia.com/compute/cudss/redist/libcudss/linux-x86_64/libcudss-linux-x86_64-0.7.1.4_cuda13-archive.tar.xz" && \
+        tar -xf archive.tar.xz && rm archive.tar.xz
+ENV cudss_DIR=/build/libcudss-linux-x86_64-0.7.1.4_cuda13-archive/lib/cmake/cudss
 
 ###############################################################################
 # vcpkg (stable layer)
@@ -64,11 +68,10 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 # Build COLMAP
 ###############################################################################
 COPY colmap colmap
-RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
+RUN --mount=type=cache,target=/opt/vcpkg/downloads,sharing=locked \
+    --mount=type=cache,target=/opt/vcpkg/buildtrees,sharing=locked \
+    --mount=type=cache,target=/opt/vcpkg/packages,sharing=locked \
+    --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
@@ -92,11 +95,10 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
 # Build OpenMVS
 ###############################################################################
 COPY openMVS openMVS
-RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
+RUN --mount=type=cache,target=/opt/vcpkg/downloads,sharing=locked \
+    --mount=type=cache,target=/opt/vcpkg/buildtrees,sharing=locked \
+    --mount=type=cache,target=/opt/vcpkg/packages,sharing=locked \
+    --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
