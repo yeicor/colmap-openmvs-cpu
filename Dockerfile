@@ -8,19 +8,22 @@ ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu22.04
 ARG CUDA_ENABLED=ON
 ARG CUDA_ARCHITECTURES=all-major
 
+# Internal
+ARG VCPKG_ROOT=/opt/vcpkg
+
 ###############################################################################
 # Stage 1: Builder
 ###############################################################################
 FROM ${BASE_IMAGE} AS builder
 ARG CUDA_ENABLED
 ARG CUDA_ARCHITECTURES
+ARG VCPKG_ROOT
 
 WORKDIR /build
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    VCPKG_ROOT=/opt/vcpkg \
-    VCPKG_DEFAULT_BINARY_CACHE=/cache/vcpkg-binary \
-    VCPKG_BINARY_SOURCES="clear;files,/cache/vcpkg-binary,readwrite"
+    VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary \
+    VCPKG_BINARY_SOURCES="clear;files,${VCPKG_ROOT}/cache/vcpkg-binary,readwrite"
 
 ###############################################################################
 # System dependencies (APT cached)
@@ -50,6 +53,7 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
+    --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
@@ -77,6 +81,7 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
+    --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
@@ -105,7 +110,7 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
-ARG VCPKG_ROOT_DIR
+ARG VCPKG_ROOT
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
@@ -129,7 +134,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Copy build artifacts
 ###############################################################################
 COPY --from=builder /build/install /usr/local
-COPY --from=builder ${VCPKG_ROOT_DIR}/installed/*-linux-release/ /usr/local/
+COPY --from=builder ${VCPKG_ROOT}/installed/*-linux-release/ /usr/local/
 
 RUN ldconfig
 
