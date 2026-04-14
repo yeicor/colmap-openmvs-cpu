@@ -110,7 +110,6 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
-ARG VCPKG_ROOT
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
@@ -127,14 +126,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libx11-6 libxext6 libxrender1 \
         libxi6 libxrandr2 libxcursor1 \
         libxinerama1 libxtst6 libdbus-1-3 \
-    && rm -rf /var/lib/apt/lists/* \
-    && ldconfig
+    && rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
 # Copy build artifacts
 ###############################################################################
 COPY --from=builder /build/install /usr/local
-COPY --from=builder ${VCPKG_ROOT}/installed/*-linux-release/ /usr/local/
+COPY --from=builder /build/colmap/build/vcpkg_installed/*-linux-release/ /usr/local/
+COPY --from=builder /build/openMVS/build/vcpkg_installed/*-linux-release/ /usr/local/
 
 RUN ldconfig
 

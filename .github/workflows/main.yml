@@ -106,7 +106,6 @@ jobs:
           builder: ${{ steps.setup-buildx.outputs.name }}
           cache-dir: cache-mount
           dockerfile: Dockerfile
-          skip-extraction: true # disable post-step (done here)
         env:
           STATE_POST: "true" # Hack to force extract = true for the action
       - name: Upload vcpkg cached data as artifact (for debugging purposes)
