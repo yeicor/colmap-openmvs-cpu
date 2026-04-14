@@ -49,11 +49,11 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 ###############################################################################
 COPY colmap colmap
 RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/installed,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
+    --mount=type=cache,target=/build/colmap/build/vcpkg_installed,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
@@ -77,11 +77,11 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
 ###############################################################################
 COPY openMVS openMVS
 RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
-    --mount=type=cache,target=${VCPKG_ROOT}/installed,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
+    --mount=type=cache,target=/build/openMVS/build/vcpkg_installed,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
