@@ -94,7 +94,7 @@ jobs:
           push: false
           load: true
           #provenance: true
-          #sbom: true
+          sbom: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
       - name: Docker cache mounts (extract)
         if: "!cancelled()"
