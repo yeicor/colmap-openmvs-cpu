@@ -85,15 +85,15 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          #cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
-          #cache-to: ${{ needs.meta.outputs.is_push == 'true' && format('type=registry,ref={0}:buildcache,mode=max', needs.meta.outputs.image) || ''}}
+          cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
+          cache-to: ${{ needs.meta.outputs.is_push == 'true' && format('type=registry,ref={0}:buildcache,mode=max', needs.meta.outputs.image) || ''}}
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
             CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
           push: false
           load: true
-          #provenance: true
+          provenance: true
           #sbom: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
       - name: Docker cache mounts (extract)
