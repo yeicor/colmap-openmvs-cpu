@@ -93,7 +93,7 @@ jobs:
             CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
           push: false
           load: true
-          provenance: true
+          #provenance: true
           #sbom: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
       - name: Docker cache mounts (extract)
