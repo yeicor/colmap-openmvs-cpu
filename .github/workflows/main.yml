@@ -100,6 +100,7 @@ jobs:
           sbom: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}-wip
       - name: Docker cache mounts (extract)
+        if: !cancelled()
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
@@ -109,7 +110,7 @@ jobs:
         env:
           STATE_POST: "true" # Hack to force extract = true for the action
       - name: Upload vcpkg cached data as artifact (for debugging purposes)
-        if: always()
+        if: !cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: vcpkg-cached-${{ matrix.variant }}-${{ matrix.arch }}

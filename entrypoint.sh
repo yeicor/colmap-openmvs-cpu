@@ -89,8 +89,6 @@ if [[ "$(id -u)" -eq 0 ]]; then
     setup_user "$@"
 fi
 
-export PATH="/usr/local/bin/OpenMVS:${PATH}"
-
 ########################################
 # Helper: run command only if marker missing
 ########################################

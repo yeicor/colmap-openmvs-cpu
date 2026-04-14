@@ -8,16 +8,12 @@ ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu22.04
 ARG CUDA_ENABLED=ON
 ARG CUDA_ARCHITECTURES=all-major
 
-# Internal
-ARG VCPKG_INSTALLED_DIR=/build/vcpkg_installed
-
 ###############################################################################
 # Stage 1: Builder
 ###############################################################################
 FROM ${BASE_IMAGE} AS builder
 ARG CUDA_ENABLED
 ARG CUDA_ARCHITECTURES
-ARG VCPKG_INSTALLED_DIR
 
 WORKDIR /build
 
@@ -50,7 +46,7 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 ###############################################################################
 COPY colmap colmap
 RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
-    --mount=type=cache,target=${VCPKG_INSTALLED_DIR},sharing=locked \
+    --mount=type=cache,target=${VCPKG_ROOT}/installed,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
@@ -64,7 +60,6 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
-        -DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR} \
         -DGUI_ENABLED=OFF \
         -DCUDA_ENABLED=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
@@ -78,7 +73,7 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
 ###############################################################################
 COPY openMVS openMVS
 RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
-    --mount=type=cache,target=${VCPKG_INSTALLED_DIR},sharing=locked \
+    --mount=type=cache,target=${VCPKG_ROOT}/installed,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/downloads,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
@@ -89,7 +84,6 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
-        -DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR} \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
@@ -111,11 +105,11 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
-ARG VCPKG_INSTALLED_DIR
+ARG VCPKG_ROOT_DIR
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
-    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu
+    LD_LIBRARY_PATH=/usr/local/lib
 
 ###############################################################################
 # Runtime dependencies (APT cached)
@@ -135,7 +129,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Copy build artifacts
 ###############################################################################
 COPY --from=builder /build/install /usr/local
-COPY --from=builder ${VCPKG_INSTALLED_DIR}/*-linux-release/ /usr/local/
+COPY --from=builder ${VCPKG_ROOT_DIR}/installed/*-linux-release/ /usr/local/
 
 RUN ldconfig
 
