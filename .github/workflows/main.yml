@@ -1,7 +1,7 @@
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "renovate/*"]
   pull_request:
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
         run: |
           echo "image=${{ vars.DOCKER_IMAGE_NAME }}" >> $GITHUB_OUTPUT
           echo "user=$(echo "${{ vars.DOCKER_IMAGE_NAME }}" | cut -d'/' -f1)" >> $GITHUB_OUTPUT
-          
+
           IMAGE_DATE="$(date +'%Y-%m-%d')"
           SHORT_SHA="${GITHUB_SHA::7}"
           echo "tag=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
@@ -41,7 +41,6 @@ jobs:
           - arch: amd64
             runner: ubuntu-24.04
             platform: linux/amd64
-            arch_tag: amd64
           - arch: arm64
             runner: ubuntu-24.04-arm
             platform: linux/arm64
@@ -51,12 +50,10 @@ jobs:
             BASE_IMAGE: ubuntu:24.04
             RUNTIME_IMAGE: ubuntu:24.04
             CUDA_ENABLED: OFF
-            tag_prefix: cpu
           - variant: cuda
             BASE_IMAGE: nvidia/cuda:12.9.1-devel-ubuntu24.04
             RUNTIME_IMAGE: nvidia/cuda:12.9.1-runtime-ubuntu24.04
             CUDA_ENABLED: ON
-            tag_prefix: cuda
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -98,7 +95,7 @@ jobs:
             CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
           provenance: true
           sbom: true
-          tags: ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}-wip
+          tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
       - name: Docker cache mounts (extract)
         if: "!cancelled()"
         uses: reproducible-containers/buildkit-cache-dance@v3
@@ -115,28 +112,38 @@ jobs:
           name: vcpkg-cached-${{ matrix.variant }}-${{ matrix.arch }}
           path: cache-mount
           retention-days: 1
-  
-  test:
+
+  test_and_minimize:
     needs: [meta, build]
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # variant: [cpu]
+        arch: [amd64, arm64]
+        include:
+          # Native runners
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Download Buddha dataset
         run: |
           git clone --depth 1 https://github.com/alicevision/dataset_buddha.git
-          mkdir -p data
-          cp -r dataset_buddha/buddha_mini6 data/
-      - name: Prepare dataset structure
-        run: |
           mkdir -p test_obj/images
-          cp data/buddha_mini6/*.jpg test_obj/images/
-      - name: Run pipeline (CPU only for CI)
-        run: |
-          docker run --rm \
-            -v $PWD/test_obj:/data \
-            ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-amd64 \
-            /data
+          cp dataset_buddha/buddha_mini6/*.png test_obj/images/
+          rm -rf dataset_buddha
+      - uses: kitabisa/docker-slim-action@v1
+        env:
+          DSLIM_HTTP_PROBE: false
+          DSLIM_MOUNT: "${{ github.workspace }}/test_obj:/work"
+          DSLIM_RC_EXE: "/usr/bin/bash /entrypoint.sh /work"
+        with:
+          target: ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+          tag: "cpu-slim-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip"
       - name: Upload results (fail if missing)
         uses: actions/upload-artifact@v4
         with:
@@ -145,18 +152,20 @@ jobs:
           if-no-files-found: error
 
   manifest:
-    needs: [meta, test]
-    if: needs.meta.outputs.is_push == 'true'
+    needs: [meta, test_and_minimize]
     runs-on: ubuntu-24.04
     steps:
       - name: Login to Docker Hub
+        # This if is not at the job level to simplify success detection for auto-merge rules.
+        if: needs.meta.outputs.is_push == 'true'
         uses: docker/login-action@v4
         with:
           username: ${{ needs.meta.outputs.user }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Create multi-arch manifests
+        if: needs.meta.outputs.is_push == 'true'
         run: |
-          for variant in cpu cuda; do
+          for variant in cpu cpu-slim cuda; do
             # Create multi-arch manifest
             docker buildx imagetools create \
               -t ${IMAGE}:${variant}-${TAG} \

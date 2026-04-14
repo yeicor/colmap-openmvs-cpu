@@ -146,13 +146,23 @@ run_colmap_pipeline() {
     if [[ -n "${force_colmap_mapper:-}" ]] || [[ ! -d "sparse/0" ]]; then
         mkdir -p sparse
         if [[ "${USE_GLOMAP:-yes}" == "yes" ]]; then
+            # Optional but often needed for glomap: calibrate intrinsics from the view graph.
+            # This modifies the database in-place, so work on a copy.
+            # However, it breaks the buddha demo, so disabled by default (for now).
+            if [[ "${USE_GLOMAP_CALIBRATOR:-no}" == "yes" ]]; then
+                cp database.db database_local.db
+                colmap view_graph_calibrator \
+                    --database_path database.db \
+                    ${COLMAP_ARGS:-} ${calibrator_ARGS:-}
+            fi
+
             log "=== COLMAP Global Mapper (glomap) ==="
             colmap global_mapper \
                 --image_path "$obj/images" \
                 --database_path database.db \
                 --output_path sparse \
                 --GlobalMapper.gp_use_gpu=0 \
-                ${GLOMAP_ARGS:-} ${glomap_mapper_ARGS:-} ${mapper_ARGS:-}
+                ${COLMAP_ARGS:-} ${glomap_mapper_ARGS:-} ${mapper_ARGS:-}
         else
             log "=== COLMAP Mapper ==="
             colmap mapper \

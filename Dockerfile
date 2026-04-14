@@ -3,10 +3,10 @@
 ###############################################################################
 # Build arguments
 ###############################################################################
-ARG BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu22.04
-ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu22.04
+ARG BASE_IMAGE=nvidia/cuda:13.1.1-devel-ubuntu24.04
+ARG RUNTIME_IMAGE=nvidia/cuda:13.1.1-runtime-ubuntu24.04
 ARG CUDA_ENABLED=ON
-ARG CUDA_ARCHITECTURES=all-major
+ARG CUDA_ARCHITECTURES=native
 
 # Internal
 ARG VCPKG_ROOT=/opt/vcpkg
@@ -30,13 +30,29 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ###############################################################################
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git curl zip unzip tar \
-        pkg-config python3 python3-venv gfortran \
-        autoconf autoconf-archive automake bison libtool libltdl-dev nasm \
-        libgl-dev libglu1-mesa-dev libxmu-dev libdbus-1-dev libxtst-dev \
-        libxi-dev libxinerama-dev libxcursor-dev xorg-dev ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+        # Compilers
+        build-essential \
+        gfortran \
+        # Build systems
+        cmake \
+        ninja-build \
+        autoconf autoconf-archive automake libtool \
+        pkg-config \
+        python3 \
+        # VCPKG dependencies
+        git curl ca-certificates\
+        zip unzip tar \
+        # Colmap
+        libglu1-mesa-dev \
+        # OpenMVS
+        bison \
+        libx11-dev libxft-dev libxext-dev \
+        libltdl-dev \
+        python3-venv \
+        libxi-dev libxtst-dev \
+        libxrandr-dev
 
 ###############################################################################
 # vcpkg (stable layer)
@@ -53,14 +69,14 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
-    --mount=type=cache,target=/build/colmap/build/vcpkg_installed,sharing=locked \
+    --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
-    cmake -S colmap -B colmap/build -G Ninja \
+    cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
@@ -69,8 +85,8 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DTESTS_ENABLED=OFF \
         ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-}; \
-    cmake --build colmap/build -j$(nproc); \
-    cmake --install colmap/build --prefix /build/install
+    cmake --build colmap/mybuild -j$(nproc); \
+    cmake --install colmap/mybuild --prefix /build/install
 
 ###############################################################################
 # Build OpenMVS
@@ -81,23 +97,23 @@ RUN --mount=type=cache,target=${VCPKG_DEFAULT_BINARY_CACHE},sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/buildtrees,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/packages,sharing=locked \
     --mount=type=cache,target=${VCPKG_ROOT}/cache,sharing=locked \
-    --mount=type=cache,target=/build/openMVS/build/vcpkg_installed,sharing=locked \
+    --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
-    cmake -S openMVS -B openMVS/build -G Ninja \
+    cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
-        -DOpenMVS_BUILD_TOOLS=OFF \
         -DOpenMVS_BUILD_VIEWER=OFF \
         -DOpenMVS_ENABLE_TESTS=OFF \
         -DOpenMVS_USE_BREAKPAD=OFF; \
-    cmake --build openMVS/build -j$(nproc); \
-    cmake --install openMVS/build --prefix /build/install
+    cmake --build openMVS/mybuild -j$(nproc); \
+    cmake --install openMVS/mybuild --prefix /build/install; \
+    cp -r /usr/local/bin/OpenMVS /build/install/bin/OpenMVS
 
 ###############################################################################
 # Strip binaries (smaller image)
@@ -113,39 +129,44 @@ FROM ${RUNTIME_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
-    LD_LIBRARY_PATH=/usr/local/lib
+    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda-13.1/compat/
 
 ###############################################################################
 # Runtime dependencies (APT cached)
 ###############################################################################
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-        libstdc++6 libgcc-s1 libgfortran5 ca-certificates \
-        libgl1 libglu1-mesa libboost-dev \
-        libx11-6 libxext6 libxrender1 \
-        libxi6 libxrandr2 libxcursor1 \
-        libxinerama1 libxtst6 libdbus-1-3 \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libstdc++6 libgcc-s1 libgfortran5 \
+        ca-certificates \
+        libglu1-mesa \
+        libx11-6 \
+        libxft2 \
+        libxext6 \
+        libltdl7 \
+        libxi6 \
+        libxtst6 \
+        libxrandr2 \
+        libglx-mesa0 \
+        libgl1 \
+        libgl1-mesa-dri \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
 # Copy build artifacts
 ###############################################################################
 COPY --from=builder /build/install /usr/local
-COPY --from=builder /build/colmap/build/vcpkg_installed/*-linux-release/ /usr/local/
-COPY --from=builder /build/openMVS/build/vcpkg_installed/*-linux-release/ /usr/local/
 
 RUN ldconfig
 
 ###############################################################################
 # Entrypoint
 ###############################################################################
-COPY --chmod=755 entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 
 LABEL org.opencontainers.image.title="colmap-openmvs" \
       org.opencontainers.image.description="COLMAP + OpenMVS: SfM and MVS pipeline" \
       org.opencontainers.image.vendor="COLMAP+OpenMVS" \
       org.opencontainers.image.source="https://github.com/yeicor/colmap-openmvs"
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/bash", "/entrypoint.sh"]
 CMD ["--help"]
