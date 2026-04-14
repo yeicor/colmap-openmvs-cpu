@@ -85,7 +85,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: ${{ matrix.platform }}
           cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
           cache-to: ${{ needs.meta.outputs.is_push == 'true' && format('type=registry,ref={0}:buildcache,mode=max', needs.meta.outputs.image) || ''}}
           build-args: |
