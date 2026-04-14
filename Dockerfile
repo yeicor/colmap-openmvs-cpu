@@ -13,11 +13,15 @@ ARG CUDA_ARCHITECTURES=all-major
 
 FROM ${BASE_IMAGE} AS builder
 
+WORKDIR /build
+
 ENV DEBIAN_FRONTEND=noninteractive \
     VCPKG_ROOT=/opt/vcpkg \
-    VCPKG_DEFAULT_TRIPLET=x64-linux \
+    VCPKG_OVERLAY_TRIPLETS=/build/vcpkg_triplets \
     VCPKG_INSTALLED_DIR=/build/vcpkg_installed \
-    CC=gcc CXX=g++
+    CC=gcc CXX=g++ \
+    SCCACHE_DIR=/cache/sccache \
+    SCCACHE_CACHE_SIZE=20G
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -42,26 +46,12 @@ RUN set -eu; \
     && chmod +x /usr/local/bin/sccache \
     && rm -f sccache.tar.gz
 
-RUN git clone --depth 1 --filter=blob:none https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}" \
-    && cd "${VCPKG_ROOT}" && ./bootstrap-vcpkg.sh -disableMetrics \
-    && rm -rf "${VCPKG_ROOT}/.git"
-
-ENV VCPKG_ROOT=/opt/vcpkg \
-    PATH=/opt/vcpkg:$PATH \
-    SCCACHE_DIR=/cache/sccache \
-    SCCACHE_CACHE_SIZE=20G
-
-
-WORKDIR /build
+COPY --chmod=755 vcpkg "${VCPKG_ROOT}"
+RUN cd "${VCPKG_ROOT}" && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf "${VCPKG_ROOT}/.git"
 
 COPY --chmod=755 colmap colmap
-
-RUN 
 RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
-    sccache --zero-stats 2>/dev/null || true \
-    && if [ "$(uname -m)" = "aarch64" ]; then \
-      export CMAKE_CONFIGURE_OPTIONS="-DOPENEXR_IMF_HAVE_GCC_INLINE_ASM_AVX=OFF -DIEX_HAVE_CONTROL_REGISTER_SUPPORT=OFF -DIEX_HAVE_SIGCONTEXT_CONTROL_REGISTER_SUPPORT=OFF"; \
-    fi \
+    sccache --show-stats && sccache --zero-stats 2>/dev/null || true \
     && cmake -S colmap -B colmap/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
@@ -79,9 +69,8 @@ RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
     && sccache --show-stats || (find /opt/vcpkg/buildtrees -name "*.log" -exec cat {} \; 2>/dev/null; exit 1)
 
 COPY --chmod=755 openMVS openMVS
-
 RUN --mount=type=cache,target=/cache/sccache,sharing=locked \
-    sccache --zero-stats 2>/dev/null || true \
+    sccache --show-stats && sccache --zero-stats 2>/dev/null || true \
     && cmake -S openMVS -B openMVS/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
