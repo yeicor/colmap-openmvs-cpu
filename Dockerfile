@@ -15,6 +15,7 @@ ARG VCPKG_INSTALLED_DIR=/build/vcpkg_installed
 # Stage 1: Builder
 ###############################################################################
 FROM ${BASE_IMAGE} AS builder
+ARG VCPKG_INSTALLED_DIR
 
 WORKDIR /build
 
@@ -106,6 +107,7 @@ RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
+ARG VCPKG_INSTALLED_DIR
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
