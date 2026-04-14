@@ -62,7 +62,7 @@ ENV cudss_DIR=/build/libcudss-linux-x86_64-0.7.1.4_cuda13-archive/lib/cmake/cuds
 # vcpkg (stable layer)
 ###############################################################################
 COPY vcpkg ${VCPKG_ROOT}
-RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE} && rm -rf .git
+RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 
 ###############################################################################
 # Build COLMAP
@@ -79,6 +79,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/downloads,sharing=locked \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
+    mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE}; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
