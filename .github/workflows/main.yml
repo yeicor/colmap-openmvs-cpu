@@ -96,7 +96,14 @@ jobs:
             CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
           provenance: true
           sbom: true
-          tags: ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}-untested
+          tags: ${{ needs.meta.outputs.image }}:${{ matrix.tag_prefix }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch_tag }}-wip
+      - name: Upload vcpkg cached data as artifact (for debugging purposes)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-cached-${{ matrix.variant }}-${{ matrix.arch }}
+          path: cache-mount
+          retention-days: 1
   
   test:
     needs: [meta, build]
@@ -139,11 +146,17 @@ jobs:
       - name: Create multi-arch manifests
         run: |
           for variant in cpu cuda; do
+            # Create multi-arch manifest
             docker buildx imagetools create \
               -t ${IMAGE}:${variant}-${TAG} \
               -t ${IMAGE}:${variant}-latest \
-              ${IMAGE}:${variant}-${TAG}-amd64-untested \
-              ${IMAGE}:${variant}-${TAG}-arm64-untested
+              ${IMAGE}:${variant}-${TAG}-amd64-wip \
+              ${IMAGE}:${variant}-${TAG}-arm64-wip
+            # Delete temporary wip tags
+            docker buildx imagetools rm \
+              ${IMAGE}:${variant}-${TAG}-amd64-wip || true
+            docker buildx imagetools rm \
+              ${IMAGE}:${variant}-${TAG}-arm64-wip || true
           done
         env:
           IMAGE: ${{ needs.meta.outputs.image }}
