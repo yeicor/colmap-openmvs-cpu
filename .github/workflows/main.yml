@@ -88,7 +88,7 @@ jobs:
           push: ${{ needs.meta.outputs.is_push == 'true' }}
           platforms: ${{ matrix.platform }}
           cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
-          cache-to: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache,mode=max
+          cache-to: ${{ needs.meta.outputs.is_push == 'true' && format('type=registry,ref={0}:buildcache,mode=max', needs.meta.outputs.image) || ''}}
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
