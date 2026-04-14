@@ -15,6 +15,8 @@ ARG VCPKG_INSTALLED_DIR=/build/vcpkg_installed
 # Stage 1: Builder
 ###############################################################################
 FROM ${BASE_IMAGE} AS builder
+ARG CUDA_ENABLED
+ARG CUDA_ARCHITECTURES
 ARG VCPKG_INSTALLED_DIR
 
 WORKDIR /build
