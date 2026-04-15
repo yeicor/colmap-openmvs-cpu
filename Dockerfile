@@ -153,8 +153,6 @@ RUN apt-get update && \
 COPY --from=builder /build/install/bin /usr/local/bin
 COPY --from=builder /build/install/lib /usr/local/lib
 
-RUN ldconfig
-
 ###############################################################################
 # Entrypoint
 ###############################################################################

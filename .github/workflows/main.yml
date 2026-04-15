@@ -68,15 +68,14 @@ jobs:
       - name: Set up Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
-      - name: Download vcpkg cache artifact
-        uses: dawidd6/action-download-artifact@v20
-        with:
-          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
-          search_artifacts: true
-          workflow_conclusion: "" # search regardless of previous run conclusion
-          path: cache-mounts
-          if_no_artifact_found: ignore
-          use_unzip: true # Avoid OOM errors of node's built-in unzip on large artifacts
+      # - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM
+      #   uses: dawidd6/action-download-artifact@v20
+      #   with:
+      #     name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
+      #     search_artifacts: true
+      #     workflow_conclusion: "" # search regardless of previous run conclusion
+      #     path: cache-mounts
+      #     if_no_artifact_found: ignore
       - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
@@ -124,7 +123,7 @@ jobs:
           path: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
           retention-days: 1
 
-  test_and_minimize:
+  test:
     needs: [meta, build]
     strategy:
       fail-fast: false
@@ -149,30 +148,19 @@ jobs:
           mkdir -p test_obj/images
           cp dataset_buddha/buddha_mini6/*.png test_obj/images/
           rm -rf dataset_buddha
-      - uses: kitabisa/docker-slim-action@v1
-        env:
-          DSLIM_HTTP_PROBE: false
-          DSLIM_MOUNT: "${{ github.workspace }}/test_obj:/work"
-          DSLIM_RC_EXE: "/usr/bin/bash /entrypoint.sh /work"
-          DSLIM_RC_USER: 1001:121
-        with:
-          target: ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
-          tag: "cpu-slim-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip"
+      - name: Run docker container for testing
+        run: docker run --user $UID:$GID --rm -v ${{ github.workspace }}/test_obj:/work ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip /usr/bin/bash /entrypoint.sh /work
       - name: Upload results (fail if missing)
         uses: actions/upload-artifact@v4
         with:
           name: dataset_buddha-test-output
-          path: test_obj/openmvs/scene_dense_mesh_refined_textured.*
+          path: |
+            test_obj/colmap
+            test_obj/openmvs
           if-no-files-found: error
-      - name: Save minimized image as artifact
-        run: docker save ${{ needs.meta.outputs.image }}:cpu-slim-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip -o docker-image-cpu-slim-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
-      - name: Upload minimized image as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image-cpu-slim-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
 
   publish:
-    needs: [meta, test_and_minimize]
+    needs: [meta, test]
     runs-on: ubuntu-24.04
     if: needs.meta.outputs.is_push == 'true'
     steps:
@@ -188,7 +176,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Create multi-arch manifests
         run: |
-          for variant in cpu cpu-slim cuda; do
+          for variant in cpu cuda; do
             # Create multi-arch manifest
             docker buildx imagetools create \
               -t ${IMAGE}:${variant}-${TAG} \
@@ -201,7 +189,7 @@ jobs:
           TAG: ${{ needs.meta.outputs.tag }}
 
   success: # For auto-merging rules
-    needs: test_and_minimize
+    needs: test
     runs-on: ubuntu-24.04
     steps:
       - run: echo "All checks passed!"
