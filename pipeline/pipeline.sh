@@ -38,13 +38,19 @@ done
 log()     { echo "[$(date '+%H:%M:%S')] • $*" >&2; }
 log_ok()  { echo "[$(date '+%H:%M:%S')] ✓ $*" >&2; }
 log_err() { echo "[$(date '+%H:%M:%S')] ✗ $*" >&2; }
-log_dbg() { [[ $VERBOSE == 1 ]] && echo "[$(date '+%H:%M:%S')] ▸ $*" >&2; }
+log_dbg() { [[ $VERBOSE == 1 ]] && echo "[$(date '+%H:%M:%S')] ▸ $*" >&2 || true; }
 
 # Validate work directory
-[[ ! -d "$WORK_DIR" ]] && { log_err "Directory not found: $WORK_DIR"; exit 1; }
-[[ ! -d "$WORK_DIR/images" ]] && { log_err "No images/ directory in: $WORK_DIR"; exit 1; }
+if [[ ! -d "$WORK_DIR" ]]; then
+    log_err "Directory not found: $WORK_DIR"
+    exit 1
+fi
+if [[ ! -d "$WORK_DIR/images" ]]; then
+    log_err "No images/ directory in: $WORK_DIR"
+    exit 1
+fi
 
-mkdir -p "$LOGS_DIR"
+mkdir -p "$LOGS_DIR" || { log_err "Failed to create logs directory: $LOGS_DIR"; exit 1; }
 
 log_dbg "Work directory: $WORK_DIR (images: $IMAGES_DIR)"
 if [[ $VERBOSE == 1 ]]; then log "VERBOSE mode"; fi
@@ -52,7 +58,7 @@ if [[ $DRY_RUN == 1 ]]; then log "DRY-RUN mode"; fi
 
 # Load configuration
 if [[ -f "${SCRIPT_DIR}/config.sh" ]]; then
-    source "${SCRIPT_DIR}/config.sh"
+    source "${SCRIPT_DIR}/config.sh" || { log_err "Failed to source config"; exit 1; }
 else
     log_err "Configuration not found: ${SCRIPT_DIR}/config.sh"
     exit 1
@@ -111,14 +117,14 @@ oldest_output() {
 # Check if stage should be skipped
 is_skipped() {
     local stage=$1
-    echo ",$SKIP_STAGES," | grep -qF ",$stage," && return 0
+    echo ",$SKIP_STAGES," | grep -qF ",$stage," && return 0 || true
     return 1
 }
 
 # Check if stage is forced to run
 is_forced() {
     local stage=$1
-    echo ",$FORCE_STAGES," | grep -qF ",$stage," && return 0
+    echo ",$FORCE_STAGES," | grep -qF ",$stage," && return 0 || true
     return 1
 }
 
@@ -190,8 +196,11 @@ run_stage() {
 # Discover and execute stages
 ################################################################################
 
-readarray -t stages < <(find "${STAGES_DIR}" -name "*.stage.sh" | sort)
-[[ ${#stages[@]} -eq 0 ]] && { log_err "No stages found in $STAGES_DIR"; exit 1; }
+readarray -t stages < <(find "${STAGES_DIR}" -name "*.stage.sh" | sort) || { log_err "Failed to find stages"; exit 1; }
+if [[ ${#stages[@]} -eq 0 ]]; then
+    log_err "No stages found in $STAGES_DIR"
+    exit 1
+fi
 
 log_dbg "Found ${#stages[@]} stages"
 
@@ -202,7 +211,10 @@ for stage_file in "${stages[@]}"; do
 
     # Load stage metadata
     unset DEPENDENCIES INPUTS OUTPUTS run_stage_function
-    source "$stage_file" || { log_err "Failed to load $stage_file"; exit 1; }
+    if ! source "$stage_file"; then
+        log_err "Failed to load stage file: $stage_file"
+        exit 1
+    fi
 
     # Check skip/force
     if is_skipped "$stage_name"; then
@@ -226,10 +238,27 @@ for stage_file in "${stages[@]}"; do
     fi
 
     # Create log file directory
-    mkdir -p "$(dirname "$logfile")"
+    if ! mkdir -p "$(dirname "$logfile")"; then
+        log_err "Failed to create log directory: $(dirname "$logfile")"
+        exit 1
+    fi
 
     # Run stage and capture exit code
-    if run_stage "$stage_name" "$logfile"; then
+    if ! run_stage "$stage_name" "$logfile"; then
+        local exit_code=$?
+        log_err "$stage_name (exit code: $exit_code)"
+
+        # Show error context in verbose mode
+        if [[ $VERBOSE == 1 ]]; then
+            log_err "Last output:"
+            tail -20 "$logfile" 2>/dev/null | sed 's/^/  /' >&2
+        else
+            log_err "See $logfile for details"
+        fi
+        exit 1
+    fi
+
+    if true; then
         # Verify outputs exist
         missing=0
         for out in "${OUTPUTS[@]:-}"; do
@@ -244,18 +273,6 @@ for stage_file in "${stages[@]}"; do
         fi
 
         log_ok "$stage_name"
-    else
-        local exit_code=$?
-        log_err "$stage_name (exit code: $exit_code)"
-
-        # Show error context in verbose mode
-        if [[ $VERBOSE == 1 ]]; then
-            log_err "Last output:"
-            tail -20 "$logfile" | sed 's/^/  /' >&2
-        else
-            log_err "See $logfile for details"
-        fi
-        exit 1
     fi
 done
 
