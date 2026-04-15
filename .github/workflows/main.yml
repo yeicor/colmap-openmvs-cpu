@@ -68,12 +68,13 @@ jobs:
       - name: Set up Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
-      - name: Cache
-        uses: actions/cache@v4
-        id: cache
+      - name: Download vcpkg cache artifact
+        uses: dawidd6/action-download-artifact@v20
         with:
+          name: vcpkg-cache-${{ matrix.variant }}-${{ matrix.arch }}
+          search_artifacts: true
           path: cache-mount
-          key: cache-mount-${{ hashFiles('Dockerfile') }}
+          if_no_artifact_found: ignore
       - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
@@ -103,15 +104,15 @@ jobs:
           dockerfile: Dockerfile
         env:
           STATE_POST: "true" # Hack to force extract = true for the action
-      - name: Upload vcpkg cached data as artifact (for debugging purposes)
+      - name: Upload vcpkg cached data as artifact
         if: "!cancelled()"
         uses: actions/upload-artifact@v4
         with:
-          name: vcpkg-cached-${{ matrix.variant }}-${{ matrix.arch }}
+          name: vcpkg-cache-${{ matrix.variant }}-${{ matrix.arch }}
           path: |
             cache-mount
             !cache-mount/**/*:*
-          retention-days: 1
+          retention-days: 7
       - name: Save built image as artifact
         run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip -o docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
       - name: Upload built image as artifact
@@ -138,7 +139,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+          name: docker-image-cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
       - run: docker load -i docker-image-*.tar && rm docker-image-*.tar
       - name: Download Buddha dataset
         run: |
@@ -198,3 +199,5 @@ jobs:
 
   success: # For auto-merging rules
     needs: test_and_minimize
+    steps:
+      - run: echo "All checks passed!"
