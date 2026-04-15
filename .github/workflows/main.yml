@@ -199,5 +199,6 @@ jobs:
 
   success: # For auto-merging rules
     needs: test_and_minimize
+    runs-on: ubuntu-24.04
     steps:
       - run: echo "All checks passed!"
