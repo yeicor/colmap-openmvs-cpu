@@ -59,7 +59,6 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
-    --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
@@ -69,6 +68,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DGUI_ENABLED=OFF \
         -DCUDA_ENABLED=${CUDA_ENABLED} \
@@ -84,12 +84,12 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
 COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
-    --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
