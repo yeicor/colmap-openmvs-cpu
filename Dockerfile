@@ -21,9 +21,7 @@ ARG VCPKG_ROOT
 
 WORKDIR /build
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary \
-    VCPKG_BINARY_SOURCES="clear;files,${VCPKG_ROOT}/cache/vcpkg-binary,readwrite"
+ENV VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary
 
 ###############################################################################
 # System dependencies (APT cached)
@@ -59,10 +57,7 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 # Build COLMAP
 ###############################################################################
 COPY colmap colmap
-RUN --mount=type=cache,target=/opt/vcpkg/downloads,sharing=locked \
-    --mount=type=cache,target=/opt/vcpkg/buildtrees,sharing=locked \
-    --mount=type=cache,target=/opt/vcpkg/packages,sharing=locked \
-    --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
+RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
@@ -87,10 +82,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/downloads,sharing=locked \
 # Build OpenMVS
 ###############################################################################
 COPY openMVS openMVS
-RUN --mount=type=cache,target=/opt/vcpkg/downloads,sharing=locked \
-    --mount=type=cache,target=/opt/vcpkg/buildtrees,sharing=locked \
-    --mount=type=cache,target=/opt/vcpkg/packages,sharing=locked \
-    --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
+RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
@@ -157,11 +149,12 @@ COPY --from=builder /build/install/lib /usr/local/lib
 # Entrypoint
 ###############################################################################
 COPY entrypoint.sh /entrypoint.sh
+COPY pipeline /pipeline
 
 LABEL org.opencontainers.image.title="colmap-openmvs" \
       org.opencontainers.image.description="COLMAP + OpenMVS: SfM and MVS pipeline" \
       org.opencontainers.image.vendor="COLMAP+OpenMVS" \
       org.opencontainers.image.source="https://github.com/yeicor/colmap-openmvs"
 
-ENTRYPOINT ["/usr/bin/bash", "/entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
 CMD ["--help"]
