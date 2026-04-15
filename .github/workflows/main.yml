@@ -76,6 +76,7 @@ jobs:
           workflow_conclusion: "" # search regardless of previous run conclusion
           path: cache-mounts
           if_no_artifact_found: ignore
+          use_unzip: true # Avoid OOM errors of node's built-in unzip on large artifacts
       - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
