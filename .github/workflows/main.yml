@@ -68,14 +68,14 @@ jobs:
       - name: Set up Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
-      # - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM
-      #   uses: dawidd6/action-download-artifact@v20
-      #   with:
-      #     name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
-      #     search_artifacts: true
-      #     workflow_conclusion: "" # search regardless of previous run conclusion
-      #     path: cache-mounts
-      #     if_no_artifact_found: ignore
+      - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
+        uses: dawidd6/action-download-artifact@v20
+        with:
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
+          search_artifacts: true
+          workflow_conclusion: "" # search regardless of previous run conclusion
+          path: cache-mounts
+          if_no_artifact_found: ignore
       - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
