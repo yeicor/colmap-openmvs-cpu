@@ -152,6 +152,7 @@ jobs:
           DSLIM_HTTP_PROBE: false
           DSLIM_MOUNT: "${{ github.workspace }}/test_obj:/work"
           DSLIM_RC_EXE: "/usr/bin/bash /entrypoint.sh /work"
+          DSLIM_RC_USER: 1001:121
         with:
           target: ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
           tag: "cpu-slim-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip"

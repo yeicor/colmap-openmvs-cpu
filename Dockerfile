@@ -32,31 +32,22 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update && apt-get install -y --no-install-recommends \
-        # Compilers
         build-essential \
         gfortran \
-        # Build systems
         cmake \
         ninja-build \
         autoconf autoconf-archive automake libtool \
         pkg-config \
         python3 \
-        # VCPKG dependencies
         git curl ca-certificates\
         zip unzip tar \
-        # Colmap
         libglu1-mesa-dev \
-        # OpenMVS
         bison \
         libx11-dev libxft-dev libxext-dev \
         libltdl-dev \
         python3-venv \
         libxi-dev libxtst-dev \
-        libxrandr-dev && \
-        # Required for using the GPU in ceres (for colmap's bundle adjustment)
-        curl -Lo archive.tar.xz "https://developer.download.nvidia.com/compute/cudss/redist/libcudss/linux-x86_64/libcudss-linux-x86_64-0.7.1.4_cuda13-archive.tar.xz" && \
-        tar -xf archive.tar.xz && rm archive.tar.xz
-ENV cudss_DIR=/build/libcudss-linux-x86_64-0.7.1.4_cuda13-archive/lib/cmake/cudss
+        libxrandr-dev
 
 ###############################################################################
 # vcpkg (stable layer)
@@ -137,9 +128,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ###############################################################################
 # Runtime dependencies (APT cached)
 ###############################################################################
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         libstdc++6 libgcc-s1 libgfortran5 \
-        ca-certificates \
+        curl ca-certificates \
         libglu1-mesa \
         libx11-6 \
         libxft2 \
@@ -151,13 +143,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
-        libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+        libgomp1 && \
+    curl -Lo /vocab_tree_faiss_flickr100K_words256K.bin "https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin" && \
+    rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
 # Copy build artifacts
 ###############################################################################
-COPY --from=builder /build/install /usr/local
+COPY --from=builder /build/install/bin /usr/local/bin
+COPY --from=builder /build/install/lib /usr/local/lib
 
 RUN ldconfig
 

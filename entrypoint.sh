@@ -123,7 +123,6 @@ run_colmap_pipeline() {
         colmap feature_extractor \
             --image_path "$obj/images" \
             --database_path database.db \
-            --FeatureExtraction.use_gpu=0 \
             ${COLMAP_ARGS:-} ${feature_extractor_ARGS:-}
     else
         log "=== COLMAP Feature Extraction: SKIPPED (database.db exists) ==="
@@ -135,7 +134,7 @@ run_colmap_pipeline() {
         log "=== COLMAP Feature Matching ($matcher) ==="
         colmap "${matcher}_matcher" \
             --database_path database.db \
-            --FeatureMatching.use_gpu=0 \
+            --VocabTreeMatching.vocab_tree_path /vocab_tree_faiss_flickr100K_words256K.bin \
             ${COLMAP_ARGS:-} ${matcher_ARGS:-}
         touch .matches-done
     else
@@ -161,7 +160,6 @@ run_colmap_pipeline() {
                 --image_path "$obj/images" \
                 --database_path database.db \
                 --output_path sparse \
-                --GlobalMapper.gp_use_gpu=0 \
                 ${COLMAP_ARGS:-} ${glomap_mapper_ARGS:-} ${mapper_ARGS:-}
         else
             log "=== COLMAP Mapper ==="
