@@ -108,7 +108,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vcpkg-cached-${{ matrix.variant }}-${{ matrix.arch }}
-          path: cache-mount
+          path: |
+            cache-mount
+            !cache-mount/**/*:*
           retention-days: 1
       - run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip -o docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
       - uses: actions/upload-artifact@v4
