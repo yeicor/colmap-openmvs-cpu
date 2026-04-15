@@ -71,15 +71,15 @@ jobs:
       - name: Download vcpkg cache artifact
         uses: dawidd6/action-download-artifact@v20
         with:
-          name: vcpkg-cache-${{ matrix.variant }}-${{ matrix.arch }}
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           search_artifacts: true
-          path: cache-mount
+          path: cache-mounts
           if_no_artifact_found: ignore
       - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
-          cache-dir: cache-mount
+          cache-dir: cache-mounts
           dockerfile: Dockerfile
           skip-extraction: true # disable post-step (done manually)
       - name: Build (and push if main)
@@ -100,18 +100,18 @@ jobs:
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
-          cache-dir: cache-mount
+          cache-dir: cache-mounts
           dockerfile: Dockerfile
         env:
           STATE_POST: "true" # Hack to force extract = true for the action
-      - name: Upload vcpkg cached data as artifact
+      - name: Upload docker cache mounts for debugging and future runs
         if: "!cancelled()"
         uses: actions/upload-artifact@v4
         with:
-          name: vcpkg-cache-${{ matrix.variant }}-${{ matrix.arch }}
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           path: |
-            cache-mount
-            !cache-mount/**/*:*
+            cache-mounts
+            !cache-mounts/**/*:*
           retention-days: 7
       - name: Save built image as artifact
         run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip -o docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
