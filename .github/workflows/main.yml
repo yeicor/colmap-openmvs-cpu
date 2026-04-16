@@ -86,8 +86,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }}
-          cache-to: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }},mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
