@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
+        ccache \
         gfortran \
         cmake \
         ninja-build \
@@ -59,17 +60,22 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
+    --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
     mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE}; \
+    ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DGUI_ENABLED=OFF \
         -DCUDA_ENABLED=${CUDA_ENABLED} \
@@ -77,7 +83,9 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DTESTS_ENABLED=OFF \
         ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-}; \
     cmake --build colmap/mybuild -j$(nproc); \
-    cmake --install colmap/mybuild --prefix /build/install
+    cmake --install colmap/mybuild --prefix /build/install; \
+    ccache --show-stats --verbose; \
+    rm -r "colmap/mybuild/vcpkg_installed" # Smaller caches
 
 ###############################################################################
 # Build OpenMVS
@@ -85,14 +93,20 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
 COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
+    --mount=type=cache,target=/root/.cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
+    ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
@@ -102,7 +116,9 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DOpenMVS_USE_BREAKPAD=OFF; \
     cmake --build openMVS/mybuild -j$(nproc); \
     cmake --install openMVS/mybuild --prefix /build/install; \
-    cp -r /usr/local/bin/OpenMVS /build/install/bin/OpenMVS
+    cp -r /usr/local/bin/OpenMVS /build/install/bin/OpenMVS; \
+    ccache --show-stats --verbose; \
+    rm -r "openMVS/mybuild/vcpkg_installed" # Smaller caches
 
 ###############################################################################
 # Strip binaries (smaller image)
