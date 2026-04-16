@@ -32,8 +32,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
     APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
-        ccache \
         gfortran \
+        nasm \
+        ccache \
         cmake \
         ninja-build \
         autoconf autoconf-archive automake libtool \
