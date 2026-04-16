@@ -48,6 +48,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libltdl-dev \
         python3-venv \
         libxi-dev libxtst-dev \
+        libxinerama-dev libxcursor-dev xorg-dev \
         libxrandr-dev" && \
     for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done
 
