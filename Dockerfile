@@ -3,8 +3,8 @@
 ###############################################################################
 # Build arguments
 ###############################################################################
-ARG BASE_IMAGE=nvidia/cuda:13.1.1-devel-ubuntu24.04
-ARG RUNTIME_IMAGE=nvidia/cuda:13.1.1-runtime-ubuntu24.04
+ARG BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu24.04
+ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu24.04
 ARG CUDA_ENABLED=ON
 ARG CUDA_ARCHITECTURES=native
 
@@ -100,6 +100,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
+    ln -s /usr/bin/pkg-config /bin/pkg-config; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \

@@ -51,8 +51,8 @@ jobs:
             RUNTIME_IMAGE: mirror.gcr.io/library/ubuntu:24.04
             CUDA_ENABLED: OFF
           - variant: cuda
-            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.0-devel-ubuntu24.04
-            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.0-runtime-ubuntu24.04
+            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
+            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
             CUDA_ENABLED: ON
     runs-on: ${{ matrix.runner }}
     steps:
