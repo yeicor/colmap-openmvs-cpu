@@ -262,8 +262,9 @@ for stage_file in "${stages[@]}"; do
     fi
 
     # Run stage and capture exit code
-    if ! run_stage "$stage_name" "$logfile"; then
-        exit_code=$?
+    run_stage "$stage_name" "$logfile"
+    exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
         log_err "$stage_name (exit code: $exit_code)"
 
         # Show error context in verbose mode

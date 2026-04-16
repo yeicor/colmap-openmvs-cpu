@@ -134,7 +134,7 @@ FROM ${RUNTIME_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
-    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda-13.1/compat/
+    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda/compat/
 
 ###############################################################################
 # Runtime dependencies (APT cached)

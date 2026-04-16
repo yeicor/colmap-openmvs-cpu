@@ -42,7 +42,7 @@ ENVIRONMENT:
 EXAMPLES:
   entrypoint /data
   entrypoint -v --dry-run /data
-  entrypoint --skip colmap_undistortion /data
+  entrypoint --skip 04_colmap_undistortion /data
 EOF
     exit 0
 fi
