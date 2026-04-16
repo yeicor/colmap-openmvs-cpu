@@ -30,7 +30,7 @@ ENV VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
-    apt-get update && apt-get install -y --no-install-recommends \
+    APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         ccache \
         gfortran \
@@ -47,7 +47,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libltdl-dev \
         python3-venv \
         libxi-dev libxtst-dev \
-        libxrandr-dev
+        libxrandr-dev" && \
+    for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done
 
 ###############################################################################
 # vcpkg (stable layer)
@@ -138,8 +139,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ###############################################################################
 # Runtime dependencies (APT cached)
 ###############################################################################
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         libstdc++6 libgcc-s1 libgfortran5 \
         curl ca-certificates \
         libglu1-mesa \
@@ -153,8 +153,10 @@ RUN apt-get update && \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
-        libgomp1 && \
-    curl -Lo /vocab_tree_faiss_flickr100K_words256K.bin "https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin" && \
+        libgomp1" && \
+    for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
+    CURL_CMD="curl --fail -Lo /vocab_tree_faiss_flickr100K_words256K.bin 'https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin'" && \
+    for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
     rm -rf /var/lib/apt/lists/*
 
 ###############################################################################

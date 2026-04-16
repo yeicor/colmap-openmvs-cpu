@@ -86,8 +86,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache
-          cache-to: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }},mode=max
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
@@ -109,8 +109,24 @@ jobs:
           STATE_POST: "true" # Hack to force extract = true for the action
       - name: Disable post docker cache mounts (extract) # Hack to prevent double extraction
         run: echo "" > Dockerfile
-      - name: Upload docker cache mounts for debugging and future runs
+      - name: Check cache size and upload if >1GiB
         if: "!cancelled()"
+        run: |
+          CACHE_SIZE=$(du -sb cache-mounts 2>/dev/null | awk '{print $1}')
+          CACHE_SIZE_GB=$(echo "scale=2; $CACHE_SIZE / 1073741824" | bc)
+          echo "Cache size: ${CACHE_SIZE_GB}GB"
+
+          # Only upload cache if it's larger than 1GiB to avoid useless empty caches
+          # that can break future runs with corrupted or incomplete layers
+          if [ "$CACHE_SIZE" -gt 1073741824 ]; then
+            echo "Cache exceeds 1GiB threshold, will upload"
+            echo "SHOULD_UPLOAD_CACHE=true" >> $GITHUB_ENV
+          else
+            echo "Cache is smaller than 1GiB, skipping upload to avoid useless artifacts"
+            echo "SHOULD_UPLOAD_CACHE=false" >> $GITHUB_ENV
+          fi
+      - name: Upload docker cache mounts for debugging and future runs
+        if: "!cancelled() && env.SHOULD_UPLOAD_CACHE == 'true'"
         uses: actions/upload-artifact@v4
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
@@ -166,7 +182,7 @@ jobs:
   publish:
     needs: [meta, test]
     runs-on: ubuntu-24.04
-    #if: needs.meta.outputs.is_push == 'true'
+    if: needs.meta.outputs.is_push == 'true'
     steps:
       - uses: actions/download-artifact@v4
         with:
