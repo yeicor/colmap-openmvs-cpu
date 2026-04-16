@@ -5,27 +5,35 @@ set -euo pipefail
 
 # Simple helpers
 die() { echo "ERROR: $*" >&2; exit 1; }
-info() { echo "INFO: $*" >&2; }
 
-# Parse arguments
-WORK_DIR="${WORK_DIR:-.}"
-PIPELINE_OPTS=()
+# Check for help flag or no args (before any validation)
+if [[ $# -eq 0 ]]; then
+    show_help=1
+else
+    show_help=0
+    for arg in "$@"; do
+        if [[ "$arg" == "--help-entrypoint" ]]; then
+            show_help=1
+            break
+        fi
+    done
+fi
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            cat >&2 << 'EOF'
+if [[ $show_help -eq 1 ]]; then
+    cat >&2 << 'EOF'
 USAGE: entrypoint [OPTIONS] [WORK_DIR]
 
 ARGUMENTS:
   WORK_DIR              Working directory (default: current dir)
 
 OPTIONS:
-  -h, --help            Show this help
+  --help-entrypoint     Show this help
+  -h, --help            Show pipeline help (delegates to pipeline.sh)
   -v, --verbose         Verbose output
   --dry-run             Simulate without executing
   --force STAGES        Force re-run stages (comma-separated)
   --skip STAGES         Skip stages (comma-separated)
+  --print-vars          Print configurable environment variables and exit
 
 ENVIRONMENT:
   PUID                  User ID (default: 1000)
@@ -35,24 +43,30 @@ EXAMPLES:
   entrypoint /data
   entrypoint -v --dry-run /data
   entrypoint --skip colmap_undistortion /data
-
 EOF
-            exit 0
-            ;;
-        -v|--verbose)
-            PIPELINE_OPTS+=(--verbose)
-            shift
-            ;;
-        --dry-run)
-            PIPELINE_OPTS+=(--dry-run)
+    exit 0
+fi
+
+# Parse arguments - extract WORK_DIR and options separately
+OPTIONS=()
+WORK_DIR="<unset>"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help-entrypoint)
             shift
             ;;
         --force|--skip)
-            PIPELINE_OPTS+=("$1" "$2")
+            OPTIONS+=("$1" "$2")
             shift 2
             ;;
+        -v|--verbose|--dry-run)
+            OPTIONS+=("$1")
+            shift
+            ;;
         -*)
-            die "Unknown option: $1"
+            OPTIONS+=("$1")
+            shift
             ;;
         *)
             WORK_DIR="$1"
@@ -60,11 +74,6 @@ EOF
             ;;
     esac
 done
-
-# Validate work directory
-[[ ! -d "$WORK_DIR" ]] && die "Directory not found: $WORK_DIR"
-[[ ! -d "$WORK_DIR/images" ]] && die "Missing images/ directory in: $WORK_DIR"
-WORK_DIR="$(cd "$WORK_DIR" && pwd)"
 
 # Setup user if running as root
 if [[ "$(id -u)" == "0" ]]; then
@@ -78,13 +87,11 @@ if [[ "$(id -u)" == "0" ]]; then
     chown -R "$UID_TARGET:$GID_TARGET" "$WORK_DIR" 2>/dev/null || true
 
     if command -v gosu >/dev/null 2>&1; then
-        exec gosu "$UID_TARGET" "$0" "$@"
+        exec gosu "$UID_TARGET" "$0" "${OPTIONS[@]}" "$WORK_DIR"
     else
-        exec su - runner -c "$0 $@"
+        exec su - runner -c "$0 ${OPTIONS[*]:-} $WORK_DIR"
     fi
 fi
 
-# Show info and run pipeline
-IMAGE_COUNT=$(find "$WORK_DIR/images" -type f 2>/dev/null | wc -l)
-
-exec /pipeline/pipeline.sh "$WORK_DIR" "${PIPELINE_OPTS[@]}"
+# Run pipeline with WORK_DIR first, then options
+exec /pipeline/pipeline.sh "$WORK_DIR" "${OPTIONS[@]}"

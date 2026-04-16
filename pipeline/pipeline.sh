@@ -6,22 +6,40 @@
 # Caching logic: A stage runs IFF:
 #   1. Any output is missing, OR
 #   2. Any output is older than any input
-# No cascading, no config hashing, no complex state tracking
 ################################################################################
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+################################################################################
+# Help function - Delegates to discovery system (unified, no duplication)
+################################################################################
+
+# Check for some flags early (before validation)
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            "${SCRIPT_DIR}/discover.sh" --print-help
+            exit 0
+            ;;
+        --print-vars)
+            "${SCRIPT_DIR}/discover.sh" --print-vars
+            exit 0
+            ;;
+    esac
+done
+
 WORK_DIR="${1:-.}"
 IMAGES_DIR="${WORK_DIR}/images"
 STAGES_DIR="${SCRIPT_DIR}/stages"
-LOGS_DIR="${WORK_DIR}/.pipeline/logs"
+LOGS_DIR="${WORK_DIR}/logs"
 
 # Parse options
 VERBOSE=0
 DRY_RUN=0
-FORCE_STAGES="${FORCE_STAGES:-}"
-SKIP_STAGES="${SKIP_STAGES:-}"
+FORCE_STAGES=""
+SKIP_STAGES=""
 
 shift || true
 while [[ $# -gt 0 ]]; do
@@ -56,13 +74,13 @@ log_dbg "Work directory: $WORK_DIR (images: $IMAGES_DIR)"
 if [[ $VERBOSE == 1 ]]; then log "VERBOSE mode"; fi
 if [[ $DRY_RUN == 1 ]]; then log "DRY-RUN mode"; fi
 
-# Load configuration
-if [[ -f "${SCRIPT_DIR}/config.sh" ]]; then
-    source "${SCRIPT_DIR}/config.sh" || { log_err "Failed to source config"; exit 1; }
-else
-    log_err "Configuration not found: ${SCRIPT_DIR}/config.sh"
-    exit 1
-fi
+################################################################################
+# Import and auto-evaluate tool discovery variables (to set defaults)
+################################################################################
+
+# Auto-eval discovered variables to ensure all tools are set
+log_dbg "Discovering config..."
+eval "$(${SCRIPT_DIR}/discover.sh --print-vars)" || { log_err "Failed to discover tools"; exit 1; }
 
 ################################################################################
 # Helper functions
@@ -245,7 +263,7 @@ for stage_file in "${stages[@]}"; do
 
     # Run stage and capture exit code
     if ! run_stage "$stage_name" "$logfile"; then
-        local exit_code=$?
+        exit_code=$?
         log_err "$stage_name (exit code: $exit_code)"
 
         # Show error context in verbose mode

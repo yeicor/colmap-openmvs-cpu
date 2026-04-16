@@ -69,6 +69,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+        -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DGUI_ENABLED=OFF \
         -DCUDA_ENABLED=${CUDA_ENABLED} \
@@ -86,10 +87,12 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+        -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
