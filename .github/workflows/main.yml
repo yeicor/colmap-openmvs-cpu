@@ -198,15 +198,15 @@ jobs:
         run: |
           for variant in cpu cuda; do
             # Tag images without -wip suffix
-            docker tag ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-amd64-wip ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-amd64
-            docker tag ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-arm64-wip ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-arm64
+            docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64-wip ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
+            docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64-wip ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
             # Push individual architecture images
-            docker push ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-amd64
-            docker push ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-arm64
+            docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
+            docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
             # Create multi-arch manifest
-            docker manifest create ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-amd64 --amend ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}-arm64
+            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64 --amend ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
             # Push multi-arch manifest
-            docker manifest push ${{ needs.meta.outputs.image }}:${{ variant }}-${{ needs.meta.outputs.tag }}
+            docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
           done
         env:
           IMAGE: ${{ needs.meta.outputs.image }}
