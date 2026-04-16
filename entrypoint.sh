@@ -1,132 +1,97 @@
 #!/usr/bin/env bash
+# Production-ready Docker entrypoint for photogrammetry pipeline
 
-cd "$(dirname $(realpath $0))"
-set -ex
+set -euo pipefail
 
-# === INPUTS ===
-export obj="$1"
-if [ -z "$obj" ]; then
-    echo "Missing obj folder as the first argument. Should point to a folder with an images/ subfolder"
-    exit 1
+# Simple helpers
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+# Check for help flag or no args (before any validation)
+if [[ $# -eq 0 ]]; then
+    show_help=1
+else
+    show_help=0
+    for arg in "$@"; do
+        if [[ "$arg" == "--help-entrypoint" ]]; then
+            show_help=1
+            break
+        fi
+    done
 fi
 
-# === USER AND PERMISSIONS ===
-# If Docker already set a numeric UID/GID and PUID/PGID not explicitly set, trust Docker
-if [[ -z "${PUID+x}" && -z "${PGID+x}" ]]; then
-    export PUID="$(id -u)"
-    export PGID="$(id -g)"
+if [[ $show_help -eq 1 ]]; then
+    cat >&2 << 'EOF'
+USAGE: entrypoint [OPTIONS] [WORK_DIR]
+
+ARGUMENTS:
+  WORK_DIR              Working directory (default: current dir)
+
+OPTIONS:
+  --help-entrypoint     Show this help
+  -h, --help            Show pipeline help (delegates to pipeline.sh)
+  -v, --verbose         Verbose output
+  --dry-run             Simulate without executing
+  --force STAGES        Force re-run stages (comma-separated)
+  --skip STAGES         Skip stages (comma-separated)
+  --print-vars          Print configurable environment variables and exit
+
+ENVIRONMENT:
+  PUID                  User ID (default: 1000)
+  PGID                  Group ID (default: 1000)
+
+EXAMPLES:
+  entrypoint /data
+  entrypoint -v --dry-run /data
+  entrypoint --skip 04_colmap_undistortion /data
+EOF
+    exit 0
 fi
 
-export PUID="${PUID:-1000}"
-export PGID="${PGID:-${PUID}}"
-export USERNAME="${USERNAME:-containeruser}"
-export GROUPNAME="${GROUPNAME:-containergroup}"
+# Parse arguments - extract WORK_DIR and options separately
+OPTIONS=()
+WORK_DIR="<unset>"
 
-current_uid="$(id -u)"
-current_gid="$(id -g)"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help-entrypoint)
+            shift
+            ;;
+        --force|--skip)
+            OPTIONS+=("$1" "$2")
+            shift 2
+            ;;
+        -v|--verbose|--dry-run)
+            OPTIONS+=("$1")
+            shift
+            ;;
+        -*)
+            OPTIONS+=("$1")
+            shift
+            ;;
+        *)
+            WORK_DIR="$1"
+            shift
+            ;;
+    esac
+done
 
-if [[ "$current_uid" != "$PUID" ]] || [[ "$current_gid" != "$PGID" ]]; then
-    echo "Switching to user $PUID:$PGID..."
+# Setup user if running as root
+if [[ "$(id -u)" == "0" ]]; then
+    UID_TARGET=${PUID:-1000}
+    GID_TARGET=${PGID:-1000}
 
-    # Resolve or create group
-    existing_group="$(getent group "$PGID" | cut -d: -f1 || true)"
-    if [[ -z "$existing_group" ]]; then
-        groupadd -g "$PGID" "$GROUPNAME"
-        target_group="$GROUPNAME"
-    else
-        target_group="$existing_group"
+    if ! id "$UID_TARGET" >/dev/null 2>&1; then
+        useradd -m -u "$UID_TARGET" -s /bin/bash runner 2>/dev/null || true
     fi
 
-    # Resolve or create user
-    existing_user="$(getent passwd "$PUID" | cut -d: -f1 || true)"
-    if [[ -z "$existing_user" ]]; then
-        useradd -m -u "$PUID" -g "$PGID" "$USERNAME"
-        target_user="$USERNAME"
+    chown -R "$UID_TARGET:$GID_TARGET" "$WORK_DIR" 2>/dev/null || true
+
+    if command -v gosu >/dev/null 2>&1; then
+        exec gosu "$UID_TARGET" "$0" "${OPTIONS[@]}" "$WORK_DIR"
     else
-        target_user="$existing_user"
+        exec su - runner -c "$0 ${OPTIONS[*]:-} $WORK_DIR"
     fi
-
-    chown -R "$PUID:$PGID" "$obj"
-
-    exec su - "$target_user" -c "$0 $@"
-fi
-export PATH="/usr/local/bin/OpenMVS:$PATH"
-
-# === COLMAP ===
-
-cd "$obj"
-mkdir -p colmap
-pushd colmap
-if [ ! -z "$force_colmap_feature_extractor" ] || [ ! -f "database.db" ]; then
-  # Recommended if possible: --ImageReader.single_camera=1 --ImageReader.camera_model=OPENCV
-  colmap feature_extractor --image_path ../images --database_path database.db --FeatureExtraction.use_gpu=0 $COLMAP_ARGS $feature_extractor_ARGS
 fi
 
-if [ ! -z "$force_colmap_matcher" ] || [ ! -f ".matches-done" ]; then
-  colmap_matcher="${colmap_matcher:-vocab_tree}" # exhaustive, sequential, vocab_tree...
-  colmap ${colmap_matcher}_matcher --database_path database.db --FeatureMatching.use_gpu=0 $COLMAP_ARGS $matcher_ARGS
-  touch .matches-done
-fi
-
-if [ ! -z "$force_colmap_mapper" ] || [ ! -d "sparse/0" ]; then
-  mkdir -p sparse
-  if [[ "${USE_GLOMAP:-yes}" == "yes" ]]; then
-      colmap global_mapper --image_path ../images --database_path database.db --output_path sparse --GlobalMapper.gp_use_gpu=0 $GLOMAP_ARGS $glomap_mapper_ARGS $mapper_ARGS
-  else # Use colmap's slower built-in mapper instead
-      colmap mapper --image_path ../images --database_path database.db --output_path sparse $COLMAP_ARGS $colmap_mapper_ARGS $mapper_ARGS
-  fi
-fi
-
-if [ ! -d "dense" ] || [ ! -z "$force_colmap" ]; then
-    mkdir dense
-    colmap image_undistorter --image_path ../images --input_path sparse/0 --output_path dense --output_type COLMAP --max_image_size 4096 $COLMAP_ARGS $image_undistorter_ARGS
-fi
-popd
-
-# === OPENMVS ===
-
-mkdir -p openmvs
-pushd openmvs
-if [ ! -f "scene.mvs" ] || [ ! -z "$force_openmvs_scene" ]; then
-    InterfaceCOLMAP -i ../colmap/dense -o scene.mvs $OPENMVS_ARGS $InterfaceCOLMAP_ARGS
-fi
-if [ ! -f "scene_mesh.ply" ] || [ ! -z "$force_openmvs_scene_mesh" ]; then
-    ReconstructMesh scene.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS $ReconstructMesh_SPARSE_ARGS
-fi
-
-# Optional manual crop step (open scene_mesh.ply in blender and remove out-of-bounds triangles)
-if [ ! -z "$PAUSE" ] || [ ! -z "$PAUSE_BEFORE_REFINE" ]; then
-    echo "OpenMVS mesh is ready, you can now open scene_mesh.ply in blender and remove out-of-bounds triangles. Press any key to continue..."
-    read -n 1 -s
-fi
-
-if [ ! -f "scene_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_mesh_refined" ]; then
-    RefineMesh -i scene.mvs -m scene_mesh.ply -o scene_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS $RefineMesh_SPARSE_ARGS
-fi
-if [ ! -f "scene_mesh_refined_textured.ply" ] || [ ! -z "$force_openmvs_scene_mesh_refined_textured" ]; then
-    TextureMesh -i scene.mvs -m scene_mesh_refined.ply -o scene_mesh_refined_textured.obj $OPENMVS_ARGS $TextureMesh_ARGS $TextureMesh_SPARSE_ARGS
-fi
-    
-if [ ! -f "scene_dense.mvs" ] || [ ! -z "$force_openmvs_scene_dense" ]; then
-    DensifyPointCloud scene.mvs $OPENMVS_ARGS $DensifyPointCloud_ARGS
-fi
-if [ ! -f "scene_dense_mesh.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh" ]; then
-    ReconstructMesh scene_dense.mvs $OPENMVS_ARGS $ReconstructMesh_ARGS $ReconstructMesh_DENSE_ARGS
-fi
-
-# Optional manual crop step (open scene_dense_mesh.ply in blender and remove out-of-bounds triangles)
-if [ ! -z "$PAUSE" ] || [ ! -z "$PAUSE_BEFORE_REFINE_DENSE" ]; then
-    echo "OpenMVS dense mesh is ready, you can now open scene_dense_mesh.ply in blender and remove out-of-bounds triangles. Press any key to continue..."
-    read -n 1 -s
-fi
-
-if [ ! -f "scene_dense_mesh_refined.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh_refined" ]; then
-    RefineMesh -i scene_dense.mvs -m scene_dense_mesh.ply -o scene_dense_mesh_refined.ply $OPENMVS_ARGS $RefineMesh_ARGS $RefineMesh_DENSE_ARGS
-fi
-if [ ! -f "scene_dense_mesh_refined_textured.ply" ] || [ ! -z "$force_openmvs_scene_dense_mesh_refined_textured" ]; then
-    TextureMesh -i scene_dense.mvs -m scene_dense_mesh_refined.ply -o scene_dense_mesh_refined_textured.obj $OPENMVS_ARGS $TextureMesh_ARGS $TextureMesh_DENSE_ARGS
-fi
-popd
-
-echo "Finished succesfully!"
-
+# Run pipeline with WORK_DIR first, then options
+exec /pipeline/pipeline.sh "$WORK_DIR" "${OPTIONS[@]}"

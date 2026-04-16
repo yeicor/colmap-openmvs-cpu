@@ -1,0 +1,219 @@
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "renovate/*"]
+  pull_request:
+
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      user: ${{ steps.meta.outputs.user }}
+      tag: ${{ steps.meta.outputs.tag }}
+      is_push: ${{ steps.meta.outputs.is_push }}
+    steps:
+      - name: Compute metadata
+        id: meta
+        run: |
+          echo "image=${{ vars.DOCKER_IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "user=$(echo "${{ vars.DOCKER_IMAGE_NAME }}" | cut -d'/' -f1)" >> $GITHUB_OUTPUT
+
+          IMAGE_DATE="$(date +'%Y-%m-%d')"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "tag=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "is_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_push=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [cpu, cuda]
+        arch: [amd64, arm64]
+        include:
+          # Native runners
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch_tag: arm64
+          # Variants
+          - variant: cpu
+            BASE_IMAGE: ubuntu:24.04
+            RUNTIME_IMAGE: ubuntu:24.04
+            CUDA_ENABLED: OFF
+          - variant: cuda
+            BASE_IMAGE: nvidia/cuda:12.9.1-devel-ubuntu24.04
+            RUNTIME_IMAGE: nvidia/cuda:12.9.1-runtime-ubuntu24.04
+            CUDA_ENABLED: ON
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ needs.meta.outputs.user }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Buildx
+        id: setup-buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
+        uses: dawidd6/action-download-artifact@v20
+        with:
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
+          search_artifacts: true
+          workflow_conclusion: "" # search regardless of previous run conclusion
+          path: cache-mounts
+          if_no_artifact_found: ignore
+      - name: Docker cache mounts (restore)
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: cache-mounts
+          dockerfile: Dockerfile
+          skip-extraction: true # disable post-step (done manually)
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          cache-from: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ needs.meta.outputs.image }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }},mode=max
+          build-args: |
+            BASE_IMAGE=${{ matrix.BASE_IMAGE }}
+            RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
+            CUDA_ENABLED=${{ matrix.CUDA_ENABLED }}
+          push: false
+          load: true
+          tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+        env:
+          DOCKER_BUILD_SUMMARY: false
+          DOCDOCKER_BUILD_RECORD_UPLOAD: false
+      - name: Docker cache mounts (extract)
+        if: "!cancelled()"
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: cache-mounts
+          dockerfile: Dockerfile
+        env:
+          STATE_POST: "true" # Hack to force extract = true for the action
+      - name: Disable post docker cache mounts (extract) # Hack to prevent double extraction
+        run: echo "" > Dockerfile
+      - name: Check cache size and upload if >1GiB
+        if: "!cancelled()"
+        run: |
+          CACHE_SIZE=$(du -sb cache-mounts 2>/dev/null | awk '{print $1}')
+          CACHE_SIZE_GB=$(echo "scale=2; $CACHE_SIZE / 1073741824" | bc)
+          echo "Cache size: ${CACHE_SIZE_GB}GB"
+
+          # Only upload cache if it's larger than 1GiB to avoid useless empty caches
+          # that can break future runs with corrupted or incomplete layers
+          if [ "$CACHE_SIZE" -gt 1073741824 ]; then
+            echo "Cache exceeds 1GiB threshold, will upload"
+            echo "SHOULD_UPLOAD_CACHE=true" >> $GITHUB_ENV
+          else
+            echo "Cache is smaller than 1GiB, skipping upload to avoid useless artifacts"
+            echo "SHOULD_UPLOAD_CACHE=false" >> $GITHUB_ENV
+          fi
+      - name: Upload docker cache mounts for debugging and future runs
+        if: "!cancelled() && env.SHOULD_UPLOAD_CACHE == 'true'"
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
+          path: |
+            cache-mounts
+            !cache-mounts/**/*:*
+          retention-days: 7
+      - name: Save built image as artifact
+        run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip -o docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
+      - name: Upload built image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+          path: docker-image-${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip.tar
+          retention-days: 1
+
+  test:
+    needs: [meta, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        # variant: [cpu]
+        arch: [amd64, arm64]
+        include:
+          # Native runners
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image-cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip
+      - run: docker load -i docker-image-*.tar && rm docker-image-*.tar
+      - name: Download Buddha dataset
+        run: |
+          git clone --depth 1 https://github.com/alicevision/dataset_buddha.git
+          mkdir -p test_obj/images
+          cp dataset_buddha/buddha_mini6/*.png test_obj/images/
+          rm -rf dataset_buddha
+      - name: Run docker container for testing
+        run: docker run --user $UID:$GID --rm -v ${{ github.workspace }}/test_obj:/work ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip /usr/bin/bash /entrypoint.sh /work -v
+      - name: Upload results (fail if missing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset_buddha-test-output-${{ matrix.arch }}
+          path: |
+            test_obj/colmap
+            test_obj/openmvs
+          if-no-files-found: error
+
+  publish:
+    needs: [meta, test]
+    runs-on: ubuntu-24.04
+    if: needs.meta.outputs.is_push == 'true'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: docker-image-*
+          merge-multiple: true
+      - run: for img in docker-image-*.tar; do docker load -i $img && rm $img; done
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ needs.meta.outputs.user }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Create and push multi-arch manifest
+        run: |
+          for variant in cpu cuda; do
+            # Tag images without -wip suffix
+            docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64-wip ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
+            docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64-wip ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
+            # Push individual architecture images
+            docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
+            docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
+            # Create multi-arch manifest
+            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64 --amend ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
+            # Push multi-arch manifest
+            docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
+          done
+        env:
+          IMAGE: ${{ needs.meta.outputs.image }}
+          TAG: ${{ needs.meta.outputs.tag }}
+
+  success: # For auto-merging rules
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "All checks passed!"
