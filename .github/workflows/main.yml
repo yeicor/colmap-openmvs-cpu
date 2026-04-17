@@ -80,8 +80,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=${{ github.workspace }}/cache-mounts/buildx-cache # TODO: Is this large buildx cache worth it when the small mounts exist?
+          cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
@@ -92,6 +92,10 @@ jobs:
         env:
           DOCKER_BUILD_SUMMARY: false
           DOCDOCKER_BUILD_RECORD_UPLOAD: false
+      - name: Move buildx cache to expected location for extraction
+        run: |
+          rm -rf cache-mounts/buildx-cache
+          mv .buildx-cache-new cache-mounts/buildx-cache
       - name: Docker cache mounts (extract)
         if: "!cancelled()"
         uses: reproducible-containers/buildkit-cache-dance@v3
