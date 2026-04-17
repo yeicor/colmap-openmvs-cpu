@@ -3,8 +3,8 @@
 ###############################################################################
 # Build arguments
 ###############################################################################
-ARG BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu24.04
-ARG RUNTIME_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu24.04
+ARG BASE_IMAGE=mirror.gcr.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
+ARG RUNTIME_IMAGE=mirror.gcr.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
 ARG CUDA_ENABLED=ON
 ARG CUDA_ARCHITECTURES=native
 
