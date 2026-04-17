@@ -74,6 +74,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         FAISS_DEP='{"name": "faiss", "features": ["gpu"]}'; \
     fi; \
     sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, \"poselib\", \"onnx\", |" colmap/vcpkg.json; \
+    sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -115,6 +116,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
@@ -132,9 +134,9 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
 ###############################################################################
 # Strip binaries (smaller image)
 ###############################################################################
-RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true \
-    && find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true \
-    && find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null || true
+RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null \
+    && find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null \
+    && find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null
 
 ###############################################################################
 # Stage 2: Runtime
@@ -143,7 +145,7 @@ FROM ${RUNTIME_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
-    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda/compat/
+    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda/compat
 
 ###############################################################################
 # Runtime dependencies (APT cached)
@@ -166,6 +168,26 @@ RUN APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
     for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
     CURL_CMD="curl --fail -Lo /vocab_tree_faiss_flickr100K_words256K.bin 'https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin'" && \
     for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
+    ARCH="$(uname -m)"; \
+    ORT_VERSION="1.24.4"; \
+    if [ "$ARCH" = "x86_64" ]; then \
+        if echo "$BASE_IMAGE" | grep -q cuda; then \
+            ORT_ZIP="onnxruntime-linux-x64-gpu-${ORT_VERSION}.tgz"; \
+        else \
+            ORT_ZIP="onnxruntime-linux-x64-${ORT_VERSION}.tgz"; \
+        fi; \
+        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/$ORT_ZIP"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        ORT_ZIP="onnxruntime-linux-aarch64-${ORT_VERSION}.tgz"; \
+        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/$ORT_ZIP"; \
+    else \
+        echo "Unsupported architecture: $ARCH"; exit 1; \
+    fi; \
+    TMP_ZIP="/tmp/onnxruntime.tgz"; \
+    CURL_CMD="curl --fail -L -o $TMP_ZIP $ORT_URL"; \
+    for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
+    tar -xzf $TMP_ZIP -C /usr/local --strip-components=1 && \
+    rm -f $TMP_ZIP && \
     rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
