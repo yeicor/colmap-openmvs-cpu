@@ -34,7 +34,7 @@ WORK_DIR="${1:-.}"
 IMAGES_DIR="${WORK_DIR}/images"
 STAGES_DIR="${SCRIPT_DIR}/stages"
 LOGS_DIR="${WORK_DIR}/pipeline/logs"
-STAGES_DIR="${WORK_DIR}/pipeline/stages"
+STAGES_MARKER_DIR="${WORK_DIR}/pipeline/stages"
 
 # Logging (define early for use during config loading)
 log()     { echo "[$(date '+%H:%M:%S')] • $*" >&2; }
@@ -44,7 +44,7 @@ log_dbg() { [[ $VERBOSE == 1 ]] && echo "[$(date '+%H:%M:%S')] ▸ $*" >&2 || tr
 
 # Stage completion marker helpers
 stage_marker_path() {
-    echo "${STAGES_DIR}/stage_${1}.done"
+    echo "${STAGES_MARKER_DIR}/stage_${1}.done"
 }
 
 stage_is_complete() {
@@ -83,7 +83,7 @@ if [[ ! -d "$WORK_DIR/images" ]]; then
 fi
 
 mkdir -p "$LOGS_DIR" || { log_err "Failed to create logs directory: $LOGS_DIR"; exit 1; }
-mkdir -p "$STAGES_DIR" || { log_err "Failed to create logs directory: $STAGES_DIR"; exit 1; }
+mkdir -p "$STAGES_MARKER_DIR" || { log_err "Failed to create logs directory: $STAGES_MARKER_DIR"; exit 1; }
 
 # Load custom config as soon as possible
 CONFIG_FILE="${WORK_DIR}/config.sh"
