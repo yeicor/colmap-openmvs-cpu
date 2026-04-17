@@ -60,7 +60,7 @@ jobs:
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
       - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
-        uses: yeicor/action-download-artifact@v1
+        uses: yeicor/action-download-artifact@v1.0.1
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           search_artifacts: true
