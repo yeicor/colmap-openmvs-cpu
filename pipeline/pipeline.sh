@@ -33,7 +33,27 @@ done
 WORK_DIR="${1:-.}"
 IMAGES_DIR="${WORK_DIR}/images"
 STAGES_DIR="${SCRIPT_DIR}/stages"
-LOGS_DIR="${WORK_DIR}/logs"
+LOGS_DIR="${WORK_DIR}/pipeline/logs"
+STAGES_DIR="${WORK_DIR}/pipeline/stages"
+
+# Logging (define early for use during config loading)
+log()     { echo "[$(date '+%H:%M:%S')] • $*" >&2; }
+log_ok()  { echo "[$(date '+%H:%M:%S')] ✓ $*" >&2; }
+log_err() { echo "[$(date '+%H:%M:%S')] ✗ $*" >&2; }
+log_dbg() { [[ $VERBOSE == 1 ]] && echo "[$(date '+%H:%M:%S')] ▸ $*" >&2 || true; }
+
+# Stage completion marker helpers
+stage_marker_path() {
+    echo "${STAGES_DIR}/stage_${1}.done"
+}
+
+stage_is_complete() {
+    [[ -f "$(stage_marker_path "$1")" ]]
+}
+
+stage_mark_complete() {
+    touch "$(stage_marker_path "$1")" || return 1
+}
 
 # Parse options
 VERBOSE=0
@@ -52,12 +72,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Logging
-log()     { echo "[$(date '+%H:%M:%S')] • $*" >&2; }
-log_ok()  { echo "[$(date '+%H:%M:%S')] ✓ $*" >&2; }
-log_err() { echo "[$(date '+%H:%M:%S')] ✗ $*" >&2; }
-log_dbg() { [[ $VERBOSE == 1 ]] && echo "[$(date '+%H:%M:%S')] ▸ $*" >&2 || true; }
-
 # Validate work directory
 if [[ ! -d "$WORK_DIR" ]]; then
     log_err "Directory not found: $WORK_DIR"
@@ -69,6 +83,17 @@ if [[ ! -d "$WORK_DIR/images" ]]; then
 fi
 
 mkdir -p "$LOGS_DIR" || { log_err "Failed to create logs directory: $LOGS_DIR"; exit 1; }
+mkdir -p "$STAGES_DIR" || { log_err "Failed to create logs directory: $STAGES_DIR"; exit 1; }
+
+# Load custom config as soon as possible
+CONFIG_FILE="${WORK_DIR}/config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    log_dbg "Loading config: $CONFIG_FILE"
+    if ! source "$CONFIG_FILE"; then
+        log_err "Failed to load config: $CONFIG_FILE"
+        exit 1
+    fi
+fi
 
 log_dbg "Work directory: $WORK_DIR (images: $IMAGES_DIR)"
 if [[ $VERBOSE == 1 ]]; then log "VERBOSE mode"; fi
@@ -234,19 +259,17 @@ for stage_file in "${stages[@]}"; do
         exit 1
     fi
 
-    # Check skip/force
-    if is_skipped "$stage_name"; then
-        log_dbg "Stage $stage_name: skipped (--skip)"
-        continue
-    fi
-
+    # Check skip/force/cache logic
     if is_forced "$stage_name"; then
         log "Stage $stage_name: forced (--force)"
-    elif ! outputs_stale "$stage_name" "${INPUTS[*]:-}" "${OUTPUTS[*]:-}"; then
-        log "Stage $stage_name: cached (all outputs exist and are fresh)"
+    elif is_skipped "$stage_name"; then
+        log "Stage $stage_name: skipped (--skip)"
+        continue
+    elif stage_is_complete "$stage_name" && ! outputs_stale "$stage_name" "${INPUTS[*]:-}" "${OUTPUTS[*]:-}"; then
+        log "Stage $stage_name: cached (completion marker found and outputs are fresh)"
         continue
     else
-        log "Stage $stage_name: needs execution (outputs missing or stale)"
+        log "Stage $stage_name: will run (missing/stale outputs or no completion marker)"
     fi
 
     # Dry-run mode
@@ -288,6 +311,12 @@ for stage_file in "${stages[@]}"; do
         done
 
         if [[ $missing == 1 ]]; then
+            exit 1
+        fi
+
+        # Write completion marker only after successful completion
+        if ! stage_mark_complete "$stage_name"; then
+            log_err "Failed to write completion marker for $stage_name"
             exit 1
         fi
 
