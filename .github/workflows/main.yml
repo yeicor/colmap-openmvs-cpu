@@ -48,8 +48,9 @@ jobs:
           - variant: cpu
             BASE_IMAGE: mirror.gcr.io/library/ubuntu:24.04
             RUNTIME_IMAGE: mirror.gcr.io/library/ubuntu:24.04
-            CUDA_ENABLED: OFF
-          # - variant: cuda # CUDA is already the default in the Dockerfile
+          - variant: cuda
+            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
+            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Free Disk Space - Ubuntu Runners
@@ -93,7 +94,6 @@ jobs:
           build-args: |
             ${{ matrix.BASE_IMAGE && format('BASE_IMAGE={0}', matrix.BASE_IMAGE) || '' }}
             ${{ matrix.RUNTIME_IMAGE && format('RUNTIME_IMAGE={0}', matrix.RUNTIME_IMAGE) || '' }}
-            ${{ matrix.CUDA_ENABLED && format('CUDA_ENABLED={0}', matrix.CUDA_ENABLED) || '' }}
           push: false
           load: true
           tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ needs.meta.outputs.tag }}-${{ matrix.arch }}-wip

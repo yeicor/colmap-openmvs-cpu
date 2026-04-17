@@ -3,9 +3,8 @@
 ###############################################################################
 # Build arguments
 ###############################################################################
-ARG BASE_IMAGE=mirror.gcr.io/nvidia/cuda:13.2.0-devel-ubuntu24.04
-ARG RUNTIME_IMAGE=mirror.gcr.io/nvidia/cuda:13.2.0-runtime-ubuntu24.04
-ARG CUDA_ENABLED=ON
+ARG BASE_IMAGE=set-BASE_IMAGE-to-nvidia-cuda-devel-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
+ARG RUNTIME_IMAGE=set-BASE_IMAGE-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG CUDA_ARCHITECTURES=native
 
 # Internal
@@ -15,7 +14,6 @@ ARG VCPKG_ROOT=/opt/vcpkg
 # Stage 1: Builder
 ###############################################################################
 FROM ${BASE_IMAGE} AS builder
-ARG CUDA_ENABLED
 ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
 
@@ -81,7 +79,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DGUI_ENABLED=OFF \
-        -DCUDA_ENABLED=${CUDA_ENABLED} \
+        -DCUDA_ENABLED=$([[ "${BASE_IMAGE}" == *cuda* ]] && echo "ON" || echo "OFF") \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DTESTS_ENABLED=OFF \
         ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-}; \
@@ -110,7 +108,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
-        -DOpenMVS_USE_CUDA=${CUDA_ENABLED} \
+        -DOpenMVS_USE_CUDA=$([[ "${BASE_IMAGE}" == *cuda* ]] && echo "ON" || echo "OFF") \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
         -DOpenMVS_BUILD_VIEWER=OFF \
