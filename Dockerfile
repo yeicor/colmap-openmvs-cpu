@@ -4,7 +4,7 @@
 # Build arguments
 ###############################################################################
 ARG BASE_IMAGE=set-BASE_IMAGE-to-nvidia-cuda-devel-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
-ARG RUNTIME_IMAGE=set-BASE_IMAGE-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
+ARG RUNTIME_IMAGE=set-RUNTIME_IMAGE-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG CUDA_ARCHITECTURES=native
 
 # Internal
