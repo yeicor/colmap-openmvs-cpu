@@ -75,23 +75,5 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Setup user if running as root
-if [[ "$(id -u)" == "0" ]]; then
-    UID_TARGET=${PUID:-1000}
-    GID_TARGET=${PGID:-1000}
-
-    if ! id "$UID_TARGET" >/dev/null 2>&1; then
-        useradd -m -u "$UID_TARGET" -s /bin/bash runner 2>/dev/null || true
-    fi
-
-    chown -R "$UID_TARGET:$GID_TARGET" "$WORK_DIR" 2>/dev/null || true
-
-    if command -v gosu >/dev/null 2>&1; then
-        exec gosu "$UID_TARGET" "$0" "${OPTIONS[@]}" "$WORK_DIR"
-    else
-        exec su - runner -c "$0 ${OPTIONS[*]:-} $WORK_DIR"
-    fi
-fi
-
 # Run pipeline with WORK_DIR first, then options
 exec /pipeline/pipeline.sh "$WORK_DIR" "${OPTIONS[@]}"

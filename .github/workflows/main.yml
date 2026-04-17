@@ -19,9 +19,8 @@ jobs:
           echo "image=${{ vars.DOCKER_IMAGE_NAME }}" >> $GITHUB_OUTPUT
           echo "user=$(echo "${{ vars.DOCKER_IMAGE_NAME }}" | cut -d'/' -f1)" >> $GITHUB_OUTPUT
 
-          IMAGE_DATE="$(date +'%Y-%m-%d')"
           SHORT_SHA="${GITHUB_SHA::7}"
-          echo "tag=${IMAGE_DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "tag=${SHORT_SHA}" >> $GITHUB_OUTPUT
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
             echo "is_push=true" >> $GITHUB_OUTPUT
@@ -113,7 +112,7 @@ jobs:
       - name: Disable post docker cache mounts (extract) # Hack to prevent double extraction
         run: echo "" > Dockerfile
       - name: Upload docker cache mounts for debugging and future runs
-        if: "!cancelled() && env.SHOULD_UPLOAD_CACHE == 'true'"
+        if: "!cancelled()"
         uses: actions/upload-artifact@v4
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
@@ -188,13 +187,16 @@ jobs:
             # Tag images without -wip suffix
             docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64-wip ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
             docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64-wip ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
-            # Push individual architecture images
-            docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
-            docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
+            # Push individual architecture images FIXME: Needed?
+            #docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64
+            #docker push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
             # Create multi-arch manifest
             docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-amd64 --amend ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}-arm64
             # Push multi-arch manifest
             docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
+            # Also update ${variant}-latest tag
+            docker tag ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} ${{ needs.meta.outputs.image }}:${variant}-latest
+            docker push ${{ needs.meta.outputs.image }}:${variant}-latest
           done
         env:
           IMAGE: ${{ needs.meta.outputs.image }}
