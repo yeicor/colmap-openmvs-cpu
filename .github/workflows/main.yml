@@ -67,7 +67,6 @@ jobs:
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           search_artifacts: true
-          workflow_conclusion: "" # search regardless of previous run conclusion
           path: cache-mounts
           if_no_artifact_found: ignore
       - name: Docker cache mounts (restore)
