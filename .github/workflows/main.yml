@@ -79,9 +79,7 @@ jobs:
         timeout-minutes: 180
         with:
           context: .
-          # TODO: The large buildx cache worth it when the small mounts exist?
-          #cache-from: type=local,src=${{ github.workspace }}/cache-mounts/buildx-cache
-          #cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
+          # The large buildx cache worth it when the small cache mounts exist. Do not use cache-from/cache-to.
           build-args: |
             ${{ matrix.BASE_IMAGE && format('BASE_IMAGE={0}', matrix.BASE_IMAGE) || '' }}
             ${{ matrix.RUNTIME_IMAGE && format('RUNTIME_IMAGE={0}', matrix.RUNTIME_IMAGE) || '' }}
@@ -92,11 +90,6 @@ jobs:
         env:
           DOCKER_BUILD_SUMMARY: false
           DOCDOCKER_BUILD_RECORD_UPLOAD: false
-      - name: Move buildx cache to expected location for extraction
-        if: false
-        run: |
-          rm -rf cache-mounts/buildx-cache
-          mv .buildx-cache-new cache-mounts/buildx-cache
       - name: Docker cache mounts (extract)
         if: "!cancelled()"
         uses: reproducible-containers/buildkit-cache-dance@v3
@@ -108,22 +101,6 @@ jobs:
           STATE_POST: "true" # Hack to force extract = true for the action
       - name: Disable post docker cache mounts (extract) # Hack to prevent double extraction
         run: echo "" > Dockerfile
-      - name: Check cache size and upload if >1GiB
-        if: "!cancelled()"
-        run: |
-          CACHE_SIZE=$(du -sb cache-mounts 2>/dev/null | awk '{print $1}')
-          CACHE_SIZE_GB=$(echo "scale=2; $CACHE_SIZE / 1073741824" | bc)
-          echo "Cache size: ${CACHE_SIZE_GB}GB"
-
-          # Only upload cache if it's larger than 1GiB to avoid useless empty caches
-          # that can break future runs with corrupted or incomplete layers
-          if [ "$CACHE_SIZE" -gt 1073741824 ]; then
-            echo "Cache exceeds 1GiB threshold, will upload"
-            echo "SHOULD_UPLOAD_CACHE=true" >> $GITHUB_ENV
-          else
-            echo "Cache is smaller than 1GiB, skipping upload to avoid useless artifacts"
-            echo "SHOULD_UPLOAD_CACHE=false" >> $GITHUB_ENV
-          fi
       - name: Upload docker cache mounts for debugging and future runs
         if: "!cancelled() && env.SHOULD_UPLOAD_CACHE == 'true'"
         uses: actions/upload-artifact@v4
