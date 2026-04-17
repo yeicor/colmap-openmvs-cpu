@@ -66,6 +66,7 @@ jobs:
           search_artifacts: true
           path: cache-mounts
           if_no_artifact_found: ignore
+          use_unzip: true
       - name: Docker cache mounts (restore)
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
