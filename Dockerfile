@@ -14,6 +14,7 @@ ARG VCPKG_ROOT=/opt/vcpkg
 # Stage 1: Builder
 ###############################################################################
 FROM ${BASE_IMAGE} AS builder
+ARG BASE_IMAGE
 ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
 
@@ -68,6 +69,11 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
     mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE}; \
+    FAISS_DEP='"faiss"'; \
+    if echo "$BASE_IMAGE" | grep -q cuda; then \
+        FAISS_DEP='{"name": "faiss", "features": ["gpu"]}'; \
+    fi; \
+    sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, \"poselib\", \"onnx\", |" colmap/vcpkg.json; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -78,9 +84,12 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
-        -DGUI_ENABLED=OFF \
-        -DCUDA_ENABLED=$([[ "${BASE_IMAGE}" == *cuda* ]] && echo "ON" || echo "OFF") \
+        -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
+        -DFETCH_POSELIB=OFF \
+        -DFETCH_FAISS=OFF \
+        -DFETCH_ONNX=OFF \
+        -DGUI_ENABLED=OFF \
         -DTESTS_ENABLED=OFF \
         ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-}; \
     cmake --build colmap/mybuild -j$(nproc); \
@@ -108,7 +117,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
-        -DOpenMVS_USE_CUDA=$([[ "${BASE_IMAGE}" == *cuda* ]] && echo "ON" || echo "OFF") \
+        -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
         -DOpenMVS_BUILD_VIEWER=OFF \
