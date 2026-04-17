@@ -65,7 +65,6 @@ jobs:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           search_artifacts: true
           path: cache-mounts
-          workflow_conclusion: "" # search regardless of previous run conclusion
           if_no_artifact_found: ignore
           use_unzip: true
       - name: Docker cache mounts (restore)
@@ -79,7 +78,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          # The large buildx cache worth it when the small mounts exist?
+          # TODO: The large buildx cache worth it when the small mounts exist?
           cache-from: type=local,src=${{ github.workspace }}/cache-mounts/buildx-cache
           cache-to: type=local,dest=${{ github.workspace }}/.buildx-cache-new,mode=max
           build-args: |
