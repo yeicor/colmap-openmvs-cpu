@@ -6,6 +6,7 @@
 ARG BASE_IMAGE=set-BASE_IMAGE-to-nvidia-cuda-devel-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG RUNTIME_IMAGE=set-RUNTIME_IMAGE-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG CUDA_ARCHITECTURES=native
+ARG BUILD_TYPE=Release # Debug or Release
 
 # Internal
 ARG VCPKG_ROOT=/opt/vcpkg
@@ -17,6 +18,7 @@ FROM ${BASE_IMAGE} AS builder
 ARG BASE_IMAGE
 ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
+ARG BUILD_TYPE
 
 WORKDIR /build
 
@@ -39,7 +41,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         autoconf autoconf-archive automake libtool \
         pkg-config \
         python3 \
-        git curl ca-certificates\
+        git curl ca-certificates \
         zip unzip tar \
         libglu1-mesa-dev \
         bison \
@@ -87,6 +89,10 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
+    EXTRA_FLAGS=''; \
+    if [ "$BUILD_TYPE" = "Debug" ]; then \
+        EXTRA_FLAGS='-g -fno-omit-frame-pointer -fno-inline'; \
+    fi; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
@@ -99,15 +105,15 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic" \
-        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic" \
+        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
@@ -131,19 +137,25 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
+    EXTRA_FLAGS=''; \
+    IPO_FLAG=ON; \
+    if [ "$BUILD_TYPE" = "Debug" ]; then \
+        EXTRA_FLAGS='-g -fno-omit-frame-pointer -fno-inline'; \
+        IPO_FLAG=OFF; \
+    fi; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic" \
-        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic" \
-        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
+        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=${IPO_FLAG} \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
@@ -159,16 +171,20 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     rm -r "openMVS/mybuild/vcpkg_installed" # Smaller caches
 
 ###############################################################################
-# Strip binaries (smaller image)
+# Strip binaries only for release builds
 ###############################################################################
-RUN find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null \
-    && find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null \
-    && find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null
+RUN set -eux; \
+    if [ "$BUILD_TYPE" == "Release" ]; then \
+        find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
+        find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true; \
+        find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null || true; \
+    fi
 
 ###############################################################################
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
+ARG BUILD_TYPE
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
@@ -177,7 +193,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ###############################################################################
 # Runtime dependencies (APT cached)
 ###############################################################################
-RUN APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
+RUN set -eux; \
+    DEBUG_RUNTIME_PACKAGES=""; \
+    if [ "$BUILD_TYPE" = "Debug" ]; then \
+        DEBUG_RUNTIME_PACKAGES="gdb binutils"; \
+    fi; \
+    APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         libstdc++6 libgcc-s1 libgfortran5 \
         curl ca-certificates \
         libglu1-mesa \
@@ -191,7 +212,8 @@ RUN APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
-        libgomp1" && \
+        libgomp1 \
+        ${DEBUG_RUNTIME_PACKAGES}" && \
     for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
     CURL_CMD="curl --fail -Lo /vocab_tree_faiss_flickr100K_words256K.bin 'https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin'" && \
     for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
