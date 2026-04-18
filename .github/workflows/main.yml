@@ -141,6 +141,7 @@ jobs:
       matrix:
         # variant: [cpu]
         arch: [amd64, arm64]
+        # build_type: [debug]
         include:
           # Native runners
           - arch: amd64

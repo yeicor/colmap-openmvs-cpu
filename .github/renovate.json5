@@ -17,10 +17,9 @@
         "/(^|/)\\.github/workflows/.+\\.ya?ml$/"
       ],
       "matchStrings": [
-        "runner:\\s+(?<depName>ubuntu)-(?<currentValue>\\d+\\.\\d+)(?:-arm)?"
+        "runner:\\s+(?<depName>ubuntu)-(?<currentValue>\\d+\\.\\d+)(-arm)?"
       ],
-      "datasourceTemplate": "github-releases",
-      "packageNameTemplate": "canonical/ubuntu",
+      "datasourceTemplate": "github-runners",
       "versioningTemplate": "ubuntu"
     },
     {
@@ -33,7 +32,6 @@
         "BASE_IMAGE:\\s+mirror\\.gcr\\.io/library/(?<depName>ubuntu):(?<currentValue>\\d+\\.\\d+)",
         "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/library/(?<depName>ubuntu):(?<currentValue>\\d+\\.\\d+)"
       ],
-      "autoReplaceStringTemplate": "mirror.gcr.io/library/{{{depName}}}:{{{newValue}}}",
       "datasourceTemplate": "docker",
       "versioningTemplate": "ubuntu"
     },
@@ -44,53 +42,11 @@
         "/(^|/)\\.github/workflows/.+\\.ya?ml$/"
       ],
       "matchStrings": [
-        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/nvidia/(?<depName>cuda):(?<currentValue>[\\d.]+-devel-ubuntu[\\d.]+)",
-        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/nvidia/(?<depName>cuda):(?<currentValue>[\\d.]+-runtime-ubuntu[\\d.]+)"
+        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+-devel-ubuntu[\\d.]+)",
+        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+-runtime-ubuntu[\\d.]+)"
       ],
-      "autoReplaceStringTemplate": "mirror.gcr.io/nvidia/{{{depName}}}:{{{newValue}}}",
       "datasourceTemplate": "docker",
       "versioningTemplate": "loose"
-    },
-    {
-      "customType": "regex",
-      "description": "Update ONNXRUNTIME_VERSION in Dockerfile",
-      "managerFilePatterns": [
-        "/(^|/)Dockerfile$/"
-      ],
-      "matchStrings": [
-        "ONNXRUNTIME_VERSION=\"(?<currentValue>[\\d.]+)\""
-      ],
-      "depNameTemplate": "microsoft/onnxruntime",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v?(?<version>[\\d.]+)$"
-    }
-  ],
-  "packageRules": [
-    {
-      "description": "Use ubuntu versioning for ubuntu runner dependencies",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": ["canonical/ubuntu"],
-      "versioning": "ubuntu"
-    },
-    {
-      "description": "Use ubuntu versioning for ubuntu docker images",
-      "matchDatasources": ["docker"],
-      "matchDepNames": ["ubuntu"],
-      "versioning": "ubuntu"
-    },
-    {
-      "description": "Use loose versioning for NVIDIA CUDA docker images",
-      "matchDatasources": ["docker"],
-      "matchDepNames": ["cuda"],
-      "versioning": "loose"
-    },
-    {
-      "description": "Use semver versioning for ONNX Runtime releases",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": ["microsoft/onnxruntime"],
-      "versioning": "semver",
-      "extractVersion": "^v?(?<version>[\\d.]+)$"
     }
   ]
 }

@@ -51,28 +51,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libxi-dev libxtst-dev \
         libxinerama-dev libxcursor-dev xorg-dev \
         libxrandr-dev"; \
-    for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done; \
-    ARCH="$(uname -m)"; \
-    ONNXRUNTIME_VERSION="1.24.4"; \
-    if [ "$ARCH" = "x86_64" ]; then \
-        ORT_ZIP="onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz"; \
-        if echo "$BASE_IMAGE" | grep -q cuda; then \
-            ORT_ZIP="onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}.tgz"; \
-        fi; \
-        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/$ORT_ZIP"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        ORT_ZIP="onnxruntime-linux-aarch64-${ONNXRUNTIME_VERSION}.tgz"; \
-        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/$ORT_ZIP"; \
-    else \
-        echo "Unsupported architecture: $ARCH"; exit 1; \
-    fi; \
-    TMP_ZIP="/tmp/onnxruntime.tgz"; \
-    CURL_CMD="curl --fail -L -o $TMP_ZIP $ORT_URL"; \
-    for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
-    tar -xzf $TMP_ZIP -C /usr/local --strip-components=1 && \
-    sed -i -e "s|/include/onnxruntime|/include|g" /usr/local/lib/cmake/onnxruntime/onnxruntimeTargets.cmake; \
-    sed -i -e "s|/lib64/|/lib/|g" /usr/local/lib/cmake/onnxruntime/onnxruntimeTargets-release.cmake; \
-    rm -f $TMP_ZIP
+    for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done
 
 ###############################################################################
 # vcpkg (stable layer)
@@ -112,8 +91,8 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
-        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
+        -DCMAKE_C_FLAGS="${EXTRA_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}" \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
@@ -124,7 +103,6 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     cmake --build colmap/mybuild -j$(nproc); \
     cmake --install colmap/mybuild --prefix /build/install; \
     ccache --show-stats --verbose; \
-    cp -r /usr/local/lib/libonnxruntime* /build/install/lib/; \
     rm -r "colmap/mybuild/vcpkg_installed" # Smaller caches
 
 ###############################################################################
@@ -152,8 +130,8 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
-        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic ${EXTRA_FLAGS}" \
+        -DCMAKE_C_FLAGS="${EXTRA_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}" \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=${IPO_FLAG} \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
