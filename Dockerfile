@@ -86,7 +86,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
-    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm64/')"; \
+    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm-v8a/')"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
@@ -130,7 +130,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
-    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm64/')"; \
+    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm-v8a/')"; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
