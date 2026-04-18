@@ -87,7 +87,7 @@ COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -eux; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux$(if [ "$BUILD_TYPE" = "Release" ]; then echo "-release"; fi)"; \
     CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
     EXTRA_FLAGS=''; \
     if [ "$BUILD_TYPE" = "Debug" ]; then \
@@ -101,7 +101,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     if echo "$BASE_IMAGE" | grep -q cuda; then \
         FAISS_DEP='{"name": "faiss", "features": ["gpu"]}'; \
     fi; \
-    sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, \"poselib\", |" colmap/vcpkg.json; \
+    sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, |" colmap/vcpkg.json; \
     sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
@@ -117,7 +117,6 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
-        -DFETCH_POSELIB=OFF \
         -DFETCH_FAISS=OFF \
         -DGUI_ENABLED=OFF \
         -DTESTS_ENABLED=OFF \
@@ -135,7 +134,7 @@ COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -eux; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux$(if [ "$BUILD_TYPE" = "Release" ]; then echo "-release"; fi)"; \
     CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
     EXTRA_FLAGS=''; \
     IPO_FLAG=ON; \
