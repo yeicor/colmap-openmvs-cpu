@@ -28,7 +28,7 @@ ENV VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary \
 ###############################################################################
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    set -eux; rm -f /etc/apt/apt.conf.d/docker-clean; \
     APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         gfortran \
@@ -48,8 +48,29 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         python3-venv \
         libxi-dev libxtst-dev \
         libxinerama-dev libxcursor-dev xorg-dev \
-        libxrandr-dev" && \
-    for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done
+        libxrandr-dev"; \
+    for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done; \
+    ARCH="$(uname -m)"; \
+    ONNXRUNTIME_VERSION="1.24.4"; \
+    if [ "$ARCH" = "x86_64" ]; then \
+        ORT_ZIP="onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz"; \
+        if echo "$BASE_IMAGE" | grep -q cuda; then \
+            ORT_ZIP="onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}.tgz"; \
+        fi; \
+        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/$ORT_ZIP"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        ORT_ZIP="onnxruntime-linux-aarch64-${ONNXRUNTIME_VERSION}.tgz"; \
+        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/$ORT_ZIP"; \
+    else \
+        echo "Unsupported architecture: $ARCH"; exit 1; \
+    fi; \
+    TMP_ZIP="/tmp/onnxruntime.tgz"; \
+    CURL_CMD="curl --fail -L -o $TMP_ZIP $ORT_URL"; \
+    for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
+    tar -xzf $TMP_ZIP -C /usr/local --strip-components=1 && \
+    sed -i -e "s|/include/onnxruntime|/include|g" /usr/local/lib/cmake/onnxruntime/onnxruntimeTargets.cmake; \
+    sed -i -e "s|/lib64/|/lib/|g" /usr/local/lib/cmake/onnxruntime/onnxruntimeTargets-release.cmake; \
+    rm -f $TMP_ZIP
 
 ###############################################################################
 # vcpkg (stable layer)
@@ -65,6 +86,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm64/')"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
@@ -73,7 +95,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     if echo "$BASE_IMAGE" | grep -q cuda; then \
         FAISS_DEP='{"name": "faiss", "features": ["gpu"]}'; \
     fi; \
-    sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, \"poselib\", \"onnx\", |" colmap/vcpkg.json; \
+    sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, \"poselib\", |" colmap/vcpkg.json; \
     sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
@@ -84,18 +106,20 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic" \
+        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic" \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DFETCH_POSELIB=OFF \
         -DFETCH_FAISS=OFF \
-        -DFETCH_ONNX=OFF \
         -DGUI_ENABLED=OFF \
         -DTESTS_ENABLED=OFF \
         ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-}; \
     cmake --build colmap/mybuild -j$(nproc); \
     cmake --install colmap/mybuild --prefix /build/install; \
     ccache --show-stats --verbose; \
+    cp -r /usr/local/lib/libonnxruntime* /build/install/lib/; \
     rm -r "colmap/mybuild/vcpkg_installed" # Smaller caches
 
 ###############################################################################
@@ -106,6 +130,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -eux; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm64/')"; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
@@ -116,6 +141,8 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_C_FLAGS="-march=${CC_ARCH} -mtune=generic" \
+        -DCMAKE_CXX_FLAGS="-march=${CC_ARCH} -mtune=generic" \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
@@ -168,26 +195,6 @@ RUN APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
     for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
     CURL_CMD="curl --fail -Lo /vocab_tree_faiss_flickr100K_words256K.bin 'https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin'" && \
     for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
-    ARCH="$(uname -m)"; \
-    ORT_VERSION="1.24.4"; \
-    if [ "$ARCH" = "x86_64" ]; then \
-        if echo "$BASE_IMAGE" | grep -q cuda; then \
-            ORT_ZIP="onnxruntime-linux-x64-gpu-${ORT_VERSION}.tgz"; \
-        else \
-            ORT_ZIP="onnxruntime-linux-x64-${ORT_VERSION}.tgz"; \
-        fi; \
-        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/$ORT_ZIP"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        ORT_ZIP="onnxruntime-linux-aarch64-${ORT_VERSION}.tgz"; \
-        ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/$ORT_ZIP"; \
-    else \
-        echo "Unsupported architecture: $ARCH"; exit 1; \
-    fi; \
-    TMP_ZIP="/tmp/onnxruntime.tgz"; \
-    CURL_CMD="curl --fail -L -o $TMP_ZIP $ORT_URL"; \
-    for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
-    tar -xzf $TMP_ZIP -C /usr/local --strip-components=1 && \
-    rm -f $TMP_ZIP && \
     rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
