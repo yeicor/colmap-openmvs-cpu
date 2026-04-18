@@ -122,6 +122,9 @@ jobs:
             cache-mounts
             !cache-mounts/**/*:*
           retention-days: 7
+      - name: Save some disk space
+        run: |
+          rm -rf cache-mounts
       - name: Save built image as artifact
         run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }} -o docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}.tar
       - name: Upload built image as artifact
