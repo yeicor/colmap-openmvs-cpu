@@ -19,8 +19,7 @@
       "matchStrings": [
         "runner:\\s+(?<depName>ubuntu)-(?<currentValue>\\d+\\.\\d+)(-arm)?"
       ],
-      "datasourceTemplate": "github-runners",
-      "versioningTemplate": "ubuntu"
+      "datasourceTemplate": "github-runners"
     },
     {
       "customType": "regex",
@@ -32,8 +31,7 @@
         "BASE_IMAGE:\\s+mirror\\.gcr\\.io/library/(?<depName>ubuntu):(?<currentValue>\\d+\\.\\d+)",
         "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/library/(?<depName>ubuntu):(?<currentValue>\\d+\\.\\d+)"
       ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "ubuntu"
+      "datasourceTemplate": "docker"
     },
     {
       "customType": "regex",
@@ -42,11 +40,12 @@
         "/(^|/)\\.github/workflows/.+\\.ya?ml$/"
       ],
       "matchStrings": [
-        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+-devel-ubuntu[\\d.]+)",
-        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+-runtime-ubuntu[\\d.]+)"
+        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.])+-devel-ubuntu[\\d.]+",
+        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+)-runtime-ubuntu[\\d.]+"
+        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):[\\d.]+-devel-ubuntu(?<currentValue>[\\d.]+)",
+        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):[\\d.]+-runtime-ubuntu(?<currentValue>[\\d.]+)"
       ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "loose"
+      "datasourceTemplate": "docker"
     }
   ]
 }
