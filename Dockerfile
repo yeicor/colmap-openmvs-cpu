@@ -57,6 +57,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # vcpkg (stable layer)
 ###############################################################################
 COPY vcpkg ${VCPKG_ROOT}
+COPY vcpkg_ports vcpkg_ports
 RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 
 ###############################################################################
@@ -94,6 +95,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_C_FLAGS="${EXTRA_FLAGS}" \
         -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}" \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
+        -DVCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports \
         -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DFETCH_FAISS=OFF \
@@ -135,6 +137,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=${IPO_FLAG} \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
+        -DVCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports \
         -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
@@ -151,10 +154,10 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
 # Strip binaries only for release builds
 ###############################################################################
 RUN set -eux; \
+    find /build/install -name "*.a" -delete; \
     if [ "$BUILD_TYPE" == "Release" ]; then \
         find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
         find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true; \
-        find /build/install -name "*.a" -exec strip --strip-debug {} + 2>/dev/null || true; \
     fi
 
 ###############################################################################
