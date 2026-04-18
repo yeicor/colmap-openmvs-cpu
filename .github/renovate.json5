@@ -41,7 +41,7 @@
       ],
       "matchStrings": [
         "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.])+-devel-ubuntu[\\d.]+",
-        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+)-runtime-ubuntu[\\d.]+"
+        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+)-runtime-ubuntu[\\d.]+",
         "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):[\\d.]+-devel-ubuntu(?<currentValue>[\\d.]+)",
         "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):[\\d.]+-runtime-ubuntu(?<currentValue>[\\d.]+)"
       ],
