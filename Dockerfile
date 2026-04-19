@@ -191,6 +191,14 @@ RUN set -eux; \
         libxrandr2 \
         libxcursor1 \
         libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libdbus-1-3 \
+        libxrender1 \
+        libxcb1 \
+        libsystemd0 \
+        libxau6 \
+        libxdmcp6 \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
