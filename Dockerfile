@@ -26,7 +26,7 @@ ENV VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary \
     CCACHE_DIR=${VCPKG_ROOT}/cache/ccache
 
 ###############################################################################
-# System dependencies (APT cached)
+# System dependencies
 ###############################################################################
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -171,7 +171,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda/compat
 
 ###############################################################################
-# Runtime dependencies (APT cached)
+# Runtime dependencies
 ###############################################################################
 RUN set -eux; \
     DEBUG_RUNTIME_PACKAGES=""; \
@@ -190,6 +190,7 @@ RUN set -eux; \
         libxtst6 \
         libxrandr2 \
         libxcursor1 \
+        libxcomposite1 \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
