@@ -189,6 +189,7 @@ RUN set -eux; \
         libxi6 \
         libxtst6 \
         libxrandr2 \
+        libxcursor1 \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
