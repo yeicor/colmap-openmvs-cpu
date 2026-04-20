@@ -83,6 +83,8 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         FAISS_DEP='{"name": "faiss", "features": ["gpu"]}'; \
     fi; \
     sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, |" colmap/vcpkg.json; \
+    rm colmap/vcpkg-configuration.json; \
+    sed -i -E ':a;N;$!ba;s/"overrides": \[[^]]*\],?//g' colmap/vcpkg.json; \
     sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
