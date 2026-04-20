@@ -28,16 +28,12 @@ ARGUMENTS:
 
 OPTIONS:
   --help-entrypoint     Show this help
-  -h, --help            Show pipeline help (delegates to pipeline.sh)
+  -h, --help            Show pipeline help (much more detailed)
   -v, --verbose         Verbose output
   --dry-run             Simulate without executing
   --force STAGES        Force re-run stages (comma-separated)
   --skip STAGES         Skip stages (comma-separated)
   --print-vars          Print configurable environment variables and exit
-
-ENVIRONMENT:
-  PUID                  User ID (default: 1000)
-  PGID                  Group ID (default: 1000)
 
 EXAMPLES:
   entrypoint /data

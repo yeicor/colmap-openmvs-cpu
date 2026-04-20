@@ -169,10 +169,6 @@ RUN set -eux; \
 FROM ${RUNTIME_IMAGE} AS runtime
 ARG BUILD_TYPE
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
-    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda/compat
-
 ###############################################################################
 # Runtime dependencies
 ###############################################################################
@@ -221,6 +217,19 @@ COPY --from=builder /build/install/lib /usr/local/lib
 ###############################################################################
 COPY entrypoint.sh /entrypoint.sh
 COPY pipeline /pipeline
+
+RUN set -eux; \
+    mkdir -p /home/user; \
+    chmod 777 /home/user
+
+WORKDIR /home/user
+
+ENV HOME=/home/user \
+    USER=user \
+    LOGNAME=user \
+    SHELL=/bin/bash \
+    PATH=/usr/local/bin:/usr/local/bin/OpenMVS:$PATH \
+    LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda/compat
 
 LABEL org.opencontainers.image.title="colmap-openmvs" \
       org.opencontainers.image.description="COLMAP + OpenMVS: SfM and MVS pipeline" \
