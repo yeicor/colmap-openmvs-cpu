@@ -40,12 +40,21 @@
         "/(^|/)\\.github/workflows/.+\\.ya?ml$/"
       ],
       "matchStrings": [
-        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+)-devel-ubuntu[\\d.]+",
-        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+)-runtime-ubuntu[\\d.]+",
-        "BASE_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):[\\d.]+-devel-ubuntu(?<currentValue>[\\d.]+)",
-        "RUNTIME_IMAGE:\\s+mirror\\.gcr\\.io/(?<depName>nvidia/cuda):[\\d.]+-runtime-ubuntu(?<currentValue>[\\d.]+)"
+        "(?:mirror\\.gcr\\.io/)?(?<depName>nvidia/cuda):(?<currentValue>[\\d.]+-(?:devel|runtime)-ubuntu[\\d.]+)",
       ],
       "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["nvidia/cuda"],
+      "matchCurrentValue": "/^[\\d.]+-devel-ubuntu[\\d.]+$/",
+      "allowedVersions": "/^[\\d.]+-devel-ubuntu[\\d.]+$/"
+    },
+    {
+      "matchPackageNames": ["nvidia/cuda"],
+      "matchCurrentValue": "/^[\\d.]+-runtime-ubuntu[\\d.]+$/",
+      "allowedVersions": "/^[\\d.]+-runtime-ubuntu[\\d.]+$/"
     }
   ]
 }

@@ -124,6 +124,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         IPO_FLAG=OFF; \
     fi; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
+    sed -i -e "s|ASSERT(viewRef.image.size() == view.depthMap.size());|// Issue #1044: ASSERT(viewRef.image.size() == view.depthMap.size());|g" openMVS/libs/MVS/SceneDensify.cpp; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
