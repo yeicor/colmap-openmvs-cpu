@@ -158,7 +158,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
 ###############################################################################
 RUN set -eux; \
     find /build/install -name "*.a" -delete; \
-    if [ "$BUILD_TYPE" == "Release" ]; then \
+    if [ "$BUILD_TYPE" = "Release" ]; then \
         find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
         find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true; \
     fi
