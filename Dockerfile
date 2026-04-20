@@ -206,8 +206,6 @@ RUN set -eux; \
         libgomp1 \
         ${DEBUG_RUNTIME_PACKAGES}" && \
     for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
-    CURL_CMD="curl --fail -Lo /vocab_tree_faiss_flickr100K_words256K.bin 'https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words256K.bin'" && \
-    for attempt in 1 2 3; do sh -c "$CURL_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
     rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
