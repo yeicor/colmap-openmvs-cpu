@@ -209,6 +209,11 @@ jobs:
 
   success: # For auto-merging rules
     needs: test
+    if: always() # Ensures this job always runs, even if 'test' fails
     runs-on: ubuntu-24.04
     steps:
-      - run: echo "All checks passed!"
+      - name: Check dependency status
+        if: needs.test.result != 'success'
+        run: |
+          echo "Required tests did not succeed (status: ${{ needs.test.result }})"
+          exit 1 # Forces this required job to fail
