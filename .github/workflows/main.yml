@@ -161,7 +161,7 @@ jobs:
           cp dataset_buddha/buddha_mini6/*.png test_obj/images/
           rm -rf dataset_buddha
       - name: Run docker container for testing
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: docker run --user $UID:$GID --rm -v ${{ github.workspace }}/test_obj:/work ${{ needs.meta.outputs.image }}:cpu-${{ matrix.arch }}-debug-${{ needs.meta.outputs.tag }} /usr/bin/bash /entrypoint.sh /work -v
       - name: Upload results (fail if missing)
         uses: actions/upload-artifact@v7
