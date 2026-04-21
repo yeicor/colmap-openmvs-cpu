@@ -126,7 +126,9 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         IPO_FLAG=OFF; \
     fi; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
+    sed -i -e "s|ASSERT(ISEQUAL(norm(normalMap0(nx)), 1.f, 1e-1f), \"Norm = \", norm(normalMap0(nx)));|// Issue #928: ASSERT(ISEQUAL(norm(normalMap0(nx)), 1.f, 1e-1f), \"Norm = \", norm(normalMap0(nx)));|g" openMVS/libs/MVS/SceneReconstruct.cpp; \
     sed -i -e "s|ASSERT(viewRef.image.size() == view.depthMap.size());|// Issue #1044: ASSERT(viewRef.image.size() == view.depthMap.size());|g" openMVS/libs/MVS/SceneDensify.cpp; \
+    sed -i -e "s|ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);|// Issue #1153: ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);|g" openMVS/libs/MVS/SceneReconstruct.cpp; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
