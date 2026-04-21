@@ -201,9 +201,9 @@ jobs:
               # Push multi-arch manifest
               docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${build_type}-${{ needs.meta.outputs.tag }}
 
-              # Also update ${variant}-${build_type}-latest tag
-              docker tag ${{ needs.meta.outputs.image }}:${variant}-${build_type}-${{ needs.meta.outputs.tag }} ${{ needs.meta.outputs.image }}:${variant}-${build_type}-latest
-              docker push ${{ needs.meta.outputs.image }}:${variant}-${build_type}-latest
+              # Also update ${variant}-${build_type}-latest manifest
+              docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${build_type}-latest --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${build_type}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${build_type}-${{ needs.meta.outputs.tag }}
+              docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${build_type}-latest
             done
           done
 
