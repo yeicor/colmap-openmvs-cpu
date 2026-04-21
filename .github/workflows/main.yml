@@ -1,5 +1,10 @@
 on:
   workflow_dispatch:
+    inputs:
+      no_cache:
+        description: "Skip downloading the cache, starting with a clean state. Note: cache upload will still be performed."
+        required: false
+        default: "false"
   push:
     branches: [main, "renovate/*"]
   pull_request:
@@ -72,6 +77,7 @@ jobs:
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
       - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
+        if: ${{ github.event.inputs.no_cache != 'true' }}
         uses: yeicor/action-download-artifact@v1.0.1
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
