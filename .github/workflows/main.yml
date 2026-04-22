@@ -55,8 +55,8 @@ jobs:
             BASE_IMAGE: mirror.gcr.io/library/ubuntu:24.04
             RUNTIME_IMAGE: mirror.gcr.io/library/ubuntu:24.04
           - variant: cuda
-            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
-            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
+            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-devel-ubuntu24.04
+            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-runtime-ubuntu24.04
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Free Disk Space - Ubuntu Runners
