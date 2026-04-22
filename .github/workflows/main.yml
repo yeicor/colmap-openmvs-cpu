@@ -1,5 +1,10 @@
 on:
   workflow_dispatch:
+    inputs:
+      no_cache:
+        description: "Skip downloading the cache, starting with a clean state. Note: cache upload will still be performed."
+        required: false
+        default: "false"
   push:
     branches: [main, "renovate/*"]
   pull_request:
@@ -49,8 +54,8 @@ jobs:
             BASE_IMAGE: mirror.gcr.io/library/ubuntu:24.04
             RUNTIME_IMAGE: mirror.gcr.io/library/ubuntu:24.04
           - variant: cuda
-            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
-            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
+            BASE_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-devel-ubuntu24.04
+            RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-runtime-ubuntu24.04
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Free Disk Space - Ubuntu Runners
@@ -71,6 +76,7 @@ jobs:
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
       - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
+        if: ${{ github.event.inputs.no_cache != 'true' }}
         uses: yeicor/action-download-artifact@v1.0.1
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
