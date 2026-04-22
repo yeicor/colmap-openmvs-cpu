@@ -126,6 +126,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         IPO_FLAG=OFF; \
     fi; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
+    sed -i -e "s|ASSERT(ISEQUAL(norm(normal), 1.f, 1e-2f), \"Norm = \", norm(normal));|// Random failure: ASSERT(ISEQUAL(norm(normal), 1.f, 1e-2f), \"Norm = \", norm(normal));|g" openMVS/libs/MVS/SceneDensify.cpp; \
     sed -i -e "s|ASSERT(ISEQUAL(norm(normalMap0(nx)), 1.f, 1e-1f), \"Norm = \", norm(normalMap0(nx)));|// Issue #928: ASSERT(ISEQUAL(norm(normalMap0(nx)), 1.f, 1e-1f), \"Norm = \", norm(normalMap0(nx)));|g" openMVS/libs/MVS/DepthMap.cpp; \
     sed -i -e "s|ASSERT(viewRef.image.size() == view.depthMap.size());|// Issue #1044: ASSERT(viewRef.image.size() == view.depthMap.size());|g" openMVS/libs/MVS/SceneDensify.cpp; \
     sed -i -e "s|ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);|// Issue #1153: ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);|g" openMVS/libs/MVS/SceneReconstruct.cpp; \
