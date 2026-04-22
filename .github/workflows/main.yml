@@ -35,7 +35,6 @@ jobs:
       matrix:
         variant: [cpu, cuda]
         arch: [amd64, arm64]
-        build_type: [debug, release]
         include:
           # Native runners
           - arch: amd64
@@ -74,7 +73,7 @@ jobs:
       - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
         uses: yeicor/action-download-artifact@v1.0.1
         with:
-          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           search_artifacts: true
           path: cache-mounts
           if_no_artifact_found: ignore
@@ -88,17 +87,16 @@ jobs:
           skip-extraction: true # disable post-step (done manually)
       - name: Build
         uses: docker/build-push-action@v7
-        timeout-minutes: 240 # 4 hours should be enough even with cache misses in debug and cuda builds
+        timeout-minutes: 240 # 4 hours should be enough even with cache misses
         with:
           context: .
           # The large buildx cache worth it when the small cache mounts exist. Do not use cache-from/cache-to.
           build-args: |
             BASE_IMAGE=${{ matrix.BASE_IMAGE }}
             RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
-            BUILD_TYPE=${{ matrix.build_type == 'debug' && 'Debug' || 'Release' }}
           push: false
           load: true
-          tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}
+          tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
         env:
           DOCKER_BUILD_SUMMARY: false
           DOCDOCKER_BUILD_RECORD_UPLOAD: false
@@ -117,7 +115,7 @@ jobs:
         if: "!cancelled()"
         uses: actions/upload-artifact@v7
         with:
-          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
           path: |
             cache-mounts
             !cache-mounts/**/*:*
@@ -126,12 +124,12 @@ jobs:
         run: |
           rm -rf cache-mounts
       - name: Save built image as artifact
-        run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }} -o docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}.tar
+        run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} -o docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}.tar
       - name: Upload built image as artifact
         uses: actions/upload-artifact@v7
         with:
-          name: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}
-          path: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}.tar
+          name: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
+          path: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}.tar
           retention-days: 1
 
   test:
@@ -139,9 +137,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # variant: [cpu]
         arch: [amd64, arm64]
-        # build_type: [debug]
         include:
           # Native runners
           - arch: amd64
@@ -152,7 +148,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: docker-image-cpu-${{ matrix.arch }}-debug-${{ needs.meta.outputs.tag }}
+          name: docker-image-cpu-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
       - run: docker load -i docker-image-*.tar && rm docker-image-*.tar
       - name: Download Buddha dataset
         run: |
@@ -162,7 +158,7 @@ jobs:
           rm -rf dataset_buddha
       - name: Run docker container for testing
         timeout-minutes: 90
-        run: docker run --user $UID:$GID --rm -v ${{ github.workspace }}/test_obj:/work ${{ needs.meta.outputs.image }}:cpu-${{ matrix.arch }}-debug-${{ needs.meta.outputs.tag }} /usr/bin/bash /entrypoint.sh /work -v
+        run: docker run --user $UID:$GID --rm -v ${{ github.workspace }}/test_obj:/work ${{ needs.meta.outputs.image }}:cpu-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} /usr/bin/bash /entrypoint.sh /work -v
       - name: Upload results (fail if missing)
         uses: actions/upload-artifact@v7
         with:
@@ -190,21 +186,19 @@ jobs:
       - name: Create and push multi-arch manifest
         run: |
           for variant in cpu cuda; do
-            for build_type in debug release; do
-              # Push individual architecture images. Needed for multi-arch manifest to work.
-              docker push ${{ needs.meta.outputs.image }}:${variant}-amd64-${build_type}-${{ needs.meta.outputs.tag }}
-              docker push ${{ needs.meta.outputs.image }}:${variant}-arm64-${build_type}-${{ needs.meta.outputs.tag }}
+            # Push individual architecture images. Needed for multi-arch manifest to work.
+            docker push ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }}
+            docker push ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }}
 
-              # Create multi-arch manifest for this variant and build_type
-              docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${build_type}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${build_type}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${build_type}-${{ needs.meta.outputs.tag }}
+            # Create multi-arch manifest for this variant
+            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }}
 
-              # Push multi-arch manifest
-              docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${build_type}-${{ needs.meta.outputs.tag }}
+            # Push multi-arch manifest
+            docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
 
-              # Also update ${variant}-${build_type}-latest manifest
-              docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${build_type}-latest --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${build_type}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${build_type}-${{ needs.meta.outputs.tag }}
-              docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${build_type}-latest
-            done
+            # Also update ${variant}-latest manifest
+            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-latest --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }}
+            docker manifest push ${{ needs.meta.outputs.image }}:${variant}-latest
           done
 
   success: # For auto-merging rules
