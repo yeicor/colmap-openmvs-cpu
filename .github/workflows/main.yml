@@ -150,12 +150,18 @@ jobs:
         with:
           name: docker-image-cpu-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
       - run: docker load -i docker-image-*.tar && rm docker-image-*.tar
-      - name: Download Buddha dataset
+      - name: Download and extract test dataset
         run: |
-          git clone --depth 1 https://github.com/alicevision/dataset_buddha.git
-          mkdir -p test_obj/images
-          cp dataset_buddha/buddha_mini6/*.png test_obj/images/
-          rm -rf dataset_buddha
+          # CC BY-NC-SA 4.0: https://www.eth3d.net/datasets
+          mkdir -p test_obj/images tmp
+          curl -L -o dataset.7z https://www.eth3d.net/data/door_dslr_jpg.7z
+          7z x dataset.7z -otmp
+          find tmp -type f -name "*.JPG" -exec mv {} test_obj/images/ \;
+          # Downscale images to speed up testing
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          find test_obj/images -type f -name "*.JPG" -exec mogrify -resize 25% {} \;
+          rm -rf tmp dataset.7z
       - name: Run docker container for testing
         timeout-minutes: 90
         run: docker run --user $UID:$GID --rm -v ${{ github.workspace }}/test_obj:/work ${{ needs.meta.outputs.image }}:cpu-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} /usr/bin/bash /entrypoint.sh /work -v
