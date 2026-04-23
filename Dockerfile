@@ -3,10 +3,9 @@
 ###############################################################################
 # Build arguments
 ###############################################################################
-ARG BASE_IMAGE=set-BASE_IMAGE-to-nvidia-cuda-devel-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
-ARG RUNTIME_IMAGE=set-RUNTIME_IMAGE-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
+ARG BASE_IMAGE=set-base-image-to-nvidia-cuda-devel-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
+ARG RUNTIME_IMAGE=set-runtime-image-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG CUDA_ARCHITECTURES=native
-ARG BUILD_TYPE=Release # Debug or Release
 
 # Internal
 ARG VCPKG_ROOT=/opt/vcpkg
@@ -18,7 +17,6 @@ FROM ${BASE_IMAGE} AS builder
 ARG BASE_IMAGE
 ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
-ARG BUILD_TYPE
 
 WORKDIR /build
 
@@ -67,13 +65,9 @@ COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -eux; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux$(if [ "$BUILD_TYPE" = "Release" ]; then echo "-release"; fi)"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
-    EXTRA_FLAGS=''; \
-    if [ "$BUILD_TYPE" = "Debug" ]; then \
-        EXTRA_FLAGS='-g -fno-omit-frame-pointer -fno-inline'; \
-    fi; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
@@ -88,15 +82,13 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S colmap -B colmap/mybuild -G Ninja \
-        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+        -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_FLAGS="${EXTRA_FLAGS}" \
-        -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}" \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DCUDA_ENABLED=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
@@ -116,32 +108,20 @@ COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -eux; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux$(if [ "$BUILD_TYPE" = "Release" ]; then echo "-release"; fi)"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
-    EXTRA_FLAGS=''; \
-    IPO_FLAG=ON; \
-    if [ "$BUILD_TYPE" = "Debug" ]; then \
-        EXTRA_FLAGS='-g -fno-omit-frame-pointer -fno-inline'; \
-        IPO_FLAG=OFF; \
-    fi; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
-    sed -i -e "s|ASSERT(ISEQUAL(norm(normal), 1.f, 1e-2f), \"Norm = \", norm(normal));|// Random failure: ASSERT(ISEQUAL(norm(normal), 1.f, 1e-2f), \"Norm = \", norm(normal));|g" openMVS/libs/MVS/SceneDensify.cpp; \
-    sed -i -e "s|ASSERT(ISEQUAL(norm(normalMap0(nx)), 1.f, 1e-1f), \"Norm = \", norm(normalMap0(nx)));|// Issue #928: ASSERT(ISEQUAL(norm(normalMap0(nx)), 1.f, 1e-1f), \"Norm = \", norm(normalMap0(nx)));|g" openMVS/libs/MVS/DepthMap.cpp; \
-    sed -i -e "s|ASSERT(viewRef.image.size() == view.depthMap.size());|// Issue #1044: ASSERT(viewRef.image.size() == view.depthMap.size());|g" openMVS/libs/MVS/SceneDensify.cpp; \
-    sed -i -e "s|ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);|// Issue #1153: ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);|g" openMVS/libs/MVS/SceneReconstruct.cpp; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     cmake -S openMVS -B openMVS/mybuild -G Ninja \
-        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+        -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_FLAGS="${EXTRA_FLAGS}" \
-        -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}" \
-        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=${IPO_FLAG} \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
@@ -157,29 +137,22 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     rm -r "openMVS/mybuild/vcpkg_installed" # Smaller caches
 
 ###############################################################################
-# Strip binaries only for release builds
+# Strip binaries
 ###############################################################################
 RUN set -eux; \
     find /build/install -name "*.a" -delete; \
-    if [ "$BUILD_TYPE" = "Release" ]; then \
-        find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
-        find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true; \
-    fi
+    find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
+    find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true
 
 ###############################################################################
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
-ARG BUILD_TYPE
 
 ###############################################################################
 # Runtime dependencies
 ###############################################################################
 RUN set -eux; \
-    DEBUG_RUNTIME_PACKAGES=""; \
-    if [ "$BUILD_TYPE" = "Debug" ]; then \
-        DEBUG_RUNTIME_PACKAGES="gdb binutils"; \
-    fi; \
     APT_CMD="apt-get update && apt-get install -y --no-install-recommends \
         libstdc++6 libgcc-s1 libgfortran5 \
         curl ca-certificates \
@@ -204,8 +177,7 @@ RUN set -eux; \
         libglx-mesa0 \
         libgl1 \
         libgl1-mesa-dri \
-        libgomp1 \
-        ${DEBUG_RUNTIME_PACKAGES}" && \
+        libgomp1" && \
     for attempt in 1 2 3; do sh -c "$APT_CMD" && break || ([ $attempt -lt 3 ] && sleep 5); done && \
     rm -rf /var/lib/apt/lists/*
 
