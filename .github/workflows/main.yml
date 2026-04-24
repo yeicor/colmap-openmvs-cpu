@@ -99,7 +99,8 @@ jobs:
             --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
             --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
             --load .; then
-            echo "::warning::First build failed. Retrying without cache."
+            echo "::warning::First build failed. Pruning all builder cache (including mount caches) and retrying from scratch."
+            docker buildx prune --force --builder ${{ steps.setup-buildx.outputs.name }} || true
             docker buildx build --no-cache \
               --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
               --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
