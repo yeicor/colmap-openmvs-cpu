@@ -64,10 +64,9 @@ RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
-    set -eux; \
+    set -Eeuo pipefail; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
-    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
@@ -81,7 +80,8 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     sed -i -E ':a;N;$!ba;s/"overrides": \[[^]]*\],?//g' colmap/vcpkg.json; \
     sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
-    cmake -S colmap -B colmap/mybuild -G Ninja \
+    LOG=/tmp/cmake-configure.log; \
+    if ! cmake -S colmap -B colmap/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
@@ -95,7 +95,18 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DFETCH_FAISS=OFF \
         -DGUI_ENABLED=OFF \
         -DTESTS_ENABLED=OFF \
-        ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-}; \
+        ${COLMAP_CMAKE_CONFIGURE_OPTIONS:-} \
+        2>&1 | tee "$LOG"; then \
+        echo "===< CMake failed; printing referenced vcpkg logs >==="; \
+        grep -A 5 "    See logs for more information:" "$LOG" | \
+        grep -oE '/opt/vcpkg/buildtrees/.+\.log' | tee /dev/stderr | \
+        sort -u | while read -r log; do \
+            echo "-----< $log >-----"; \
+            cat "$log" 2>/dev/null || echo "Log not found"; \
+            echo "-----< /$log >-----"; \
+        done; \
+        exit 1; \
+    fi; \
     cmake --build colmap/mybuild -j$(nproc); \
     cmake --install colmap/mybuild --prefix /build/install; \
     ccache --show-stats --verbose; \
@@ -107,13 +118,13 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
 COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
-    set -eux; \
+    set -Eeuo pipefail; \
     TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
-    CC_ARCH="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/armv8-a/')"; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
-    cmake -S openMVS -B openMVS/mybuild -G Ninja \
+    LOG=/tmp/cmake-configure.log; \
+    if ! cmake -S openMVS -B openMVS/mybuild -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
@@ -124,13 +135,24 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
-        -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo "ON"; else echo "OFF"; fi) \
+        -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo ON; else echo OFF; fi) \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} \
         -DOpenMVS_USE_PYTHON=OFF \
         -DOpenMVS_BUILD_VIEWER=OFF \
         -DOpenMVS_ENABLE_TESTS=OFF \
-        -DOpenMVS_USE_BREAKPAD=OFF; \
-    cmake --build openMVS/mybuild -j$(nproc); \
+        -DOpenMVS_USE_BREAKPAD=OFF \
+        2>&1 | tee "$LOG"; then \
+        echo "===< CMake failed; printing referenced vcpkg logs >==="; \
+        grep -A 5 "    See logs for more information:" "$LOG" | \
+        grep -oE '/opt/vcpkg/buildtrees/.+\.log' | tee /dev/stderr | \
+        sort -u | while read -r log; do \
+            echo "-----< $log >-----"; \
+            cat "$log" 2>/dev/null || echo "Log not found"; \
+            echo "-----< /$log >-----"; \
+        done; \
+        exit 1; \
+    fi; \
+    cmake --build openMVS/mybuild -j"$(nproc)"; \
     cmake --install openMVS/mybuild --prefix /build/install; \
     cp -r /usr/local/bin/OpenMVS /build/install/bin/OpenMVS; \
     ccache --show-stats --verbose; \

@@ -51,8 +51,8 @@ jobs:
             arch_tag: arm64
           # Variants
           - variant: cpu
-            BASE_IMAGE: mirror.gcr.io/library/ubuntu:26.04
-            RUNTIME_IMAGE: mirror.gcr.io/library/ubuntu:26.04
+            BASE_IMAGE: mirror.gcr.io/library/ubuntu:24.04
+            RUNTIME_IMAGE: mirror.gcr.io/library/ubuntu:24.04
           - variant: cuda
             BASE_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-devel-ubuntu24.04
             RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-runtime-ubuntu24.04
