@@ -92,20 +92,19 @@ jobs:
           dockerfile: Dockerfile
           skip-extraction: true # disable post-step (done manually)
       - name: Build
-        uses: docker/build-push-action@v7
         timeout-minutes: 240 # 4 hours should be enough even with cache misses
-        with:
-          context: .
-          # The large buildx cache worth it when the small cache mounts exist. Do not use cache-from/cache-to.
-          build-args: |
-            BASE_IMAGE=${{ matrix.BASE_IMAGE }}
-            RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }}
-          push: false
-          load: true
-          tags: ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
-        env:
-          DOCKER_BUILD_SUMMARY: false
-          DOCDOCKER_BUILD_RECORD_UPLOAD: false
+        run: |
+          docker buildx build \
+            --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
+            --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
+            --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
+            --load . || \
+          ( echo "::warning::First build failed. Retrying without cache." && \
+          docker buildx build --no-cache \
+            --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
+            --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
+            --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
+            --load . )
       - name: Docker cache mounts (extract)
         if: "!cancelled()"
         uses: reproducible-containers/buildkit-cache-dance@v3
