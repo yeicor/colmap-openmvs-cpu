@@ -19,6 +19,7 @@ ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
 
 WORKDIR /build
+SHELL ["/bin/bash", "-c"]
 
 ENV VCPKG_DEFAULT_BINARY_CACHE=${VCPKG_ROOT}/cache/vcpkg-binary \
     CCACHE_DIR=${VCPKG_ROOT}/cache/ccache
