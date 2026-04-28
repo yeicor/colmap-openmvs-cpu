@@ -57,6 +57,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ###############################################################################
 COPY vcpkg ${VCPKG_ROOT}
 COPY vcpkg_ports vcpkg_ports
+COPY vcpkg_triplets vcpkg_triplets
 RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 
 ###############################################################################
@@ -66,8 +67,9 @@ COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/;s/armv[0-9].*/arm/;s/i[3-6]86/x86/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
+    export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
@@ -120,8 +122,9 @@ COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/;s/armv[0-9].*/arm/;s/i[3-6]86/x86/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
+    export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     LOG=/tmp/cmake-configure.log; \

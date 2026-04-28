@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         variant: [cpu, cuda]
-        arch: [amd64, arm64]
+        arch: [amd64, arm64, arm32, x86]
         include:
           # Native runners
           - arch: amd64
@@ -48,7 +48,12 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
             platform: linux/arm64
-            arch_tag: arm64
+          - arch: arm32
+            runner: ubuntu-24.04-arm
+            platform: linux/arm/v7
+          - arch: x86
+            runner: ubuntu-24.04
+            platform: linux/386
           # Variants
           - variant: cpu
             BASE_IMAGE: mirror.gcr.io/library/ubuntu:24.04
@@ -72,6 +77,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
       - name: Set up Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
@@ -95,6 +102,7 @@ jobs:
         timeout-minutes: 240 # 4 hours should be enough even with cache misses
         run: |
           if ! docker buildx build \
+            --platform ${{ matrix.platform }} \
             --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
             --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
             --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
@@ -102,6 +110,7 @@ jobs:
             echo "::warning::First build failed. Pruning all builder cache (including mount caches) and retrying from scratch."
             docker buildx prune --force --builder ${{ steps.setup-buildx.outputs.name }} || true
             docker buildx build --no-cache \
+              --platform ${{ matrix.platform }} \
               --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
               --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
               --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
@@ -144,15 +153,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        arch: [amd64, arm64, arm32, x86]
         include:
           # Native runners
           - arch: amd64
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
+          - arch: arm32
+            runner: ubuntu-24.04-arm
+          - arch: x86
+            runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
       - uses: actions/download-artifact@v8
         with:
           name: docker-image-cpu-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
@@ -200,17 +215,26 @@ jobs:
         run: |
           for variant in cpu cuda; do
             # Push individual architecture images. Needed for multi-arch manifest to work.
-            docker push ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }}
-            docker push ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }}
+            for arch in amd64 arm64 arm32 x86; do
+              docker push ${{ needs.meta.outputs.image }}:${variant}-${arch}-${{ needs.meta.outputs.tag }}
+            done
 
             # Create multi-arch manifest for this variant
-            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }}
+            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-x86-${{ needs.meta.outputs.tag }}
 
             # Push multi-arch manifest
             docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
 
             # Also update ${variant}-latest manifest
-            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-latest --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }}
+            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-latest \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }} \
+              --amend ${{ needs.meta.outputs.image }}:${variant}-x86-${{ needs.meta.outputs.tag }}
             docker manifest push ${{ needs.meta.outputs.image }}:${variant}-latest
           done
 
