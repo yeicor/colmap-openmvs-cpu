@@ -51,7 +51,7 @@ jobs:
             BUILD_TYPES='["Release"]'
           fi
 
-          MATRIX=$(cat <<EOF
+          cat > matrix.json <<EOF
           {
             "variant": ["cpu", "cuda"],
             "arch": ["amd64", "arm64"],
@@ -64,8 +64,8 @@ jobs:
             ]
           }
           EOF
-          )
-          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+
+          echo "matrix=$(cat matrix.json | jq -c .)" >> $GITHUB_OUTPUT
 
   build:
     needs: [meta, matrix-prep]
