@@ -95,6 +95,9 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     if [ "${ARCH_VCPKG}" != "x64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
+    if [ "${ARCH_VCPKG}" = "arm" ]; then \
+        export VCPKG_FORCE_SYSTEM_BINARIES=1; \
+    fi; \
     mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE}; \
     FAISS_DEP='"faiss"'; \
     if echo "$BASE_IMAGE" | grep -q cuda; then \
@@ -148,6 +151,9 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     TRIPLET="${ARCH_VCPKG}-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
+    if [ "${ARCH_VCPKG}" = "arm" ]; then \
+        export VCPKG_FORCE_SYSTEM_BINARIES=1; \
+    fi; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     LOG=/tmp/cmake-configure.log; \
