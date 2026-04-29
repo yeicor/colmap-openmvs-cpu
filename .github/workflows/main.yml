@@ -40,6 +40,10 @@ jobs:
       matrix:
         variant: [cpu, cuda]
         arch: [amd64, arm64, arm32]
+        exclude:
+          # NVIDIA CUDA images have no linux/arm/v7 manifest
+          - variant: cuda
+            arch: arm32
         include:
           # Native runners
           - arch: amd64
@@ -208,28 +212,33 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Create and push multi-arch manifest
         run: |
-          for variant in cpu cuda; do
-            # Push individual architecture images. Needed for multi-arch manifest to work.
-            for arch in amd64 arm64 arm32; do
-              docker push ${{ needs.meta.outputs.image }}:${variant}-${arch}-${{ needs.meta.outputs.tag }}
-            done
-
-            # Create multi-arch manifest for this variant
-            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }}
-
-            # Push multi-arch manifest
-            docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
-
-            # Also update ${variant}-latest manifest
-            docker manifest create ${{ needs.meta.outputs.image }}:${variant}-latest \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }}
-            docker manifest push ${{ needs.meta.outputs.image }}:${variant}-latest
+          # cpu variant: amd64 + arm64 + arm32
+          for arch in amd64 arm64 arm32; do
+            docker push ${{ needs.meta.outputs.image }}:cpu-${arch}-${{ needs.meta.outputs.tag }}
           done
+          docker manifest create ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cpu-amd64-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cpu-arm64-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cpu-arm32-${{ needs.meta.outputs.tag }}
+          docker manifest push ${{ needs.meta.outputs.image }}:cpu-${{ needs.meta.outputs.tag }}
+          docker manifest create ${{ needs.meta.outputs.image }}:cpu-latest \
+            --amend ${{ needs.meta.outputs.image }}:cpu-amd64-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cpu-arm64-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cpu-arm32-${{ needs.meta.outputs.tag }}
+          docker manifest push ${{ needs.meta.outputs.image }}:cpu-latest
+
+          # cuda variant: amd64 + arm64 only (no arm32 CUDA image)
+          for arch in amd64 arm64; do
+            docker push ${{ needs.meta.outputs.image }}:cuda-${arch}-${{ needs.meta.outputs.tag }}
+          done
+          docker manifest create ${{ needs.meta.outputs.image }}:cuda-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cuda-amd64-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cuda-arm64-${{ needs.meta.outputs.tag }}
+          docker manifest push ${{ needs.meta.outputs.image }}:cuda-${{ needs.meta.outputs.tag }}
+          docker manifest create ${{ needs.meta.outputs.image }}:cuda-latest \
+            --amend ${{ needs.meta.outputs.image }}:cuda-amd64-${{ needs.meta.outputs.tag }} \
+            --amend ${{ needs.meta.outputs.image }}:cuda-arm64-${{ needs.meta.outputs.tag }}
+          docker manifest push ${{ needs.meta.outputs.image }}:cuda-latest
 
   success: # For auto-merging rules
     needs: test
