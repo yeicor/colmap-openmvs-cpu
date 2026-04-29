@@ -6,6 +6,7 @@
 ARG BASE_IMAGE=set-base-image-to-nvidia-cuda-devel-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG RUNTIME_IMAGE=set-runtime-image-to-nvidia-cuda-runtime-with-ubuntu-base-or-simply-ubuntu-for-cpu-mode
 ARG CUDA_ARCHITECTURES=native
+ARG BUILD_TYPE=Release
 
 # Internal
 ARG VCPKG_ROOT=/opt/vcpkg
@@ -17,6 +18,7 @@ FROM ${BASE_IMAGE} AS builder
 ARG BASE_IMAGE
 ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
+ARG BUILD_TYPE
 
 WORKDIR /build
 SHELL ["/bin/bash", "-c"]
@@ -78,7 +80,7 @@ RUN set -eux; \
         '#!/bin/bash' \
         'for arg in "$@"; do' \
         '  case "$arg" in' \
-        '    *openblas*) exec __REAL__ "$@" ;; # See custom port' \
+        '    *'"${VCPKG_ROOT}"'/buildtrees/openblas/src/*) exec __REAL__ "$@" ;; # See custom port' \
         '  esac' \
         'done' \
         'exec __REAL__ "$@" '"$EXTRA_FLAGS"'' \
@@ -98,7 +100,7 @@ COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
@@ -111,11 +113,10 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     sed -i -e "s|\"dependencies\": \[|\"dependencies\": [${FAISS_DEP}, |" colmap/vcpkg.json; \
     rm colmap/vcpkg-configuration.json; \
     sed -i -E ':a;N;$!ba;s/"overrides": \[[^]]*\],?//g' colmap/vcpkg.json; \
-    sed -i -e "s|if(IPO_ENABLED AND NOT IS_DEBUG AND NOT IS_GNU)|if(IPO_ENABLED AND NOT IS_DEBUG)|" colmap/CMakeLists.txt; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     LOG=/tmp/cmake-configure.log; \
     if ! cmake -S colmap -B colmap/mybuild -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
@@ -143,7 +144,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     cmake --build colmap/mybuild -j$(nproc); \
     cmake --install colmap/mybuild --prefix /build/install; \
     ccache --show-stats --verbose; \
-    rm -r "colmap/mybuild/vcpkg_installed" # Smaller caches
+    rm -r "colmap/mybuild/vcpkg_installed"
 
 ###############################################################################
 # Build OpenMVS
@@ -152,20 +153,20 @@ COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux-release"; \
+    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')-linux"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
     ccache --show-stats --verbose; ccache --zero-stats; \
     LOG=/tmp/cmake-configure.log; \
     if ! cmake -S openMVS -B openMVS/mybuild -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
         -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=$(if [ "${BUILD_TYPE}" = "Debug" ]; then echo OFF; else echo ON; fi) \
         -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
         -DVCPKG_TARGET_TRIPLET=${TRIPLET} \
         -DOpenMVS_USE_CUDA=$(if echo "$BASE_IMAGE" | grep -q cuda; then echo ON; else echo OFF; fi) \
@@ -189,20 +190,23 @@ RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     cmake --install openMVS/mybuild --prefix /build/install; \
     cp -r /usr/local/bin/OpenMVS /build/install/bin/OpenMVS; \
     ccache --show-stats --verbose; \
-    rm -r "openMVS/mybuild/vcpkg_installed" # Smaller caches
+    rm -r "openMVS/mybuild/vcpkg_installed"
 
 ###############################################################################
-# Strip binaries
+# Strip binaries (only for Release builds)
 ###############################################################################
 RUN set -eux; \
-    find /build/install -name "*.a" -delete; \
-    find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
-    find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true
+    if [ "${BUILD_TYPE}" = "Release" ]; then \
+        find /build/install -name "*.a" -delete; \
+        find /build/install -type f \( -name "*.so" -o -name "*.so.*" \) -exec strip --strip-unneeded {} + 2>/dev/null || true; \
+        find /build/install/bin -type f -executable -exec strip --strip-all {} + 2>/dev/null || true; \
+    fi
 
 ###############################################################################
 # Stage 2: Runtime
 ###############################################################################
 FROM ${RUNTIME_IMAGE} AS runtime
+ARG BUILD_TYPE
 
 ###############################################################################
 # Runtime dependencies

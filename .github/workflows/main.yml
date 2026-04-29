@@ -5,6 +5,11 @@ on:
         description: "Skip downloading the cache, starting with a clean state. Note: cache upload will still be performed."
         required: false
         default: "false"
+      build_debug:
+        description: "Build debug images (with debug symbols). Disabled by default."
+        required: false
+        default: "false"
+        type: boolean
   push:
     branches: [main, "renovate/*"]
   pull_request:
@@ -40,6 +45,7 @@ jobs:
       matrix:
         variant: [cpu, cuda]
         arch: [amd64, arm64]
+        build_type: [Release, Debug]
         include:
           # Native runners
           - arch: amd64
@@ -57,6 +63,7 @@ jobs:
             BASE_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-devel-ubuntu24.04
             RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-runtime-ubuntu24.04
     runs-on: ${{ matrix.runner }}
+    if: ${{ matrix.build_type == 'Release' || (matrix.build_type == 'Debug' && github.event.inputs.build_debug == 'true') }}
     steps:
       - name: Free Disk Space - Ubuntu Runners
         uses: endersonmenezes/free-disk-space@v3
@@ -75,11 +82,11 @@ jobs:
       - name: Set up Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v4
-      - name: Download vcpkg cache artifact # FIXME: OOM trying to download to RAM if artifact is too large, waiting for PR merge.
+      - name: Download vcpkg cache artifact
         if: ${{ github.event.inputs.no_cache != 'true' }}
         uses: yeicor/action-download-artifact@v1.0.1
         with:
-          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
           search_artifacts: true
           path: cache-mounts
           if_no_artifact_found: ignore
@@ -90,21 +97,30 @@ jobs:
           builder: ${{ steps.setup-buildx.outputs.name }}
           cache-dir: cache-mounts
           dockerfile: Dockerfile
-          skip-extraction: true # disable post-step (done manually)
+          skip-extraction: true
       - name: Build
-        timeout-minutes: 240 # 4 hours should be enough even with cache misses
+        timeout-minutes: 240
         run: |
+          BUILD_ARGS=""
+          IMAGE_SUFFIX=""
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then
+            BUILD_ARGS="--build-arg BUILD_TYPE=Debug"
+            IMAGE_SUFFIX="-debug"
+          fi
+
           if ! docker buildx build \
             --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
             --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
-            --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
+            ${BUILD_ARGS} \
+            --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}${IMAGE_SUFFIX}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
             --load .; then
             echo "::warning::First build failed. Pruning all builder cache (including mount caches) and retrying from scratch."
             docker buildx prune --force --builder ${{ steps.setup-buildx.outputs.name }} || true
             docker buildx build --no-cache \
               --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} \
               --build-arg RUNTIME_IMAGE=${{ matrix.RUNTIME_IMAGE }} \
-              --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
+              ${BUILD_ARGS} \
+              --tag ${{ needs.meta.outputs.image }}:${{ matrix.variant }}${IMAGE_SUFFIX}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} \
               --load .
           fi
       - name: Docker cache mounts (extract)
@@ -115,14 +131,14 @@ jobs:
           cache-dir: cache-mounts
           dockerfile: Dockerfile
         env:
-          STATE_POST: "true" # Hack to force extract = true for the action
-      - name: Disable post docker cache mounts (extract) # Hack to prevent double extraction
+          STATE_POST: "true"
+      - name: Disable post docker cache mounts (extract)
         run: echo "" > Dockerfile
-      - name: Upload docker cache mounts for debugging and future runs
+      - name: Upload docker cache mounts
         if: "!cancelled()"
         uses: actions/upload-artifact@v7
         with:
-          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}
+          name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
           path: |
             cache-mounts
             !cache-mounts/**/*:*
@@ -131,12 +147,17 @@ jobs:
         run: |
           rm -rf cache-mounts
       - name: Save built image as artifact
-        run: docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} -o docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}.tar
+        run: |
+          IMAGE_SUFFIX=""
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then
+            IMAGE_SUFFIX="-debug"
+          fi
+          docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}${IMAGE_SUFFIX}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} -o docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}.tar
       - name: Upload built image as artifact
         uses: actions/upload-artifact@v7
         with:
-          name: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
-          path: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}.tar
+          name: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}
+          path: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}.tar
           retention-days: 1
 
   test:
@@ -155,7 +176,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: docker-image-cpu-${{ matrix.arch }}-${{ needs.meta.outputs.tag }}
+          name: docker-image-cpu-${{ matrix.arch }}-Release-${{ needs.meta.outputs.tag }}
       - run: docker load -i docker-image-*.tar && rm docker-image-*.tar
       - name: Download and extract test dataset
         run: |
@@ -188,7 +209,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: docker-image-*
+          pattern: docker-image-*-Release-*
           merge-multiple: true
       - run: for img in docker-image-*.tar; do docker load -i $img && rm $img; done
       - name: Login to Docker Hub
@@ -216,11 +237,11 @@ jobs:
 
   success: # For auto-merging rules
     needs: test
-    if: always() # Ensures this job always runs, even if 'test' fails
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Check dependency status
         if: needs.test.result != 'success'
         run: |
           echo "Required tests did not succeed (status: ${{ needs.test.result }})"
-          exit 1 # Forces this required job to fail
+          exit 1
