@@ -69,6 +69,12 @@ RUN cd ${VCPKG_ROOT} && \
         printf '#!/bin/sh\n[ "$1" = "-m" ] && echo armv7l || exec /usr/bin/uname "$@"\n' \
             > /tmp/uname-arm/uname && \
         chmod +x /tmp/uname-arm/uname && \
+        # The vcpkg directory is a git submodule: .git is a pointer file to the parent
+        # repo's .git/modules/vcpkg, which does not exist in the container. The source
+        # compilation of vcpkg-tool uses "git apply" to patch cmakerc, and git walks up
+        # from the build directory to find a .git dir, landing on ours. Replace the
+        # submodule pointer with a real (empty) repo so that git apply succeeds.
+        rm -f .git && git init -q && \
         PATH=/tmp/uname-arm:$PATH ./bootstrap-vcpkg.sh -disableMetrics && \
         rm -rf /tmp/uname-arm; \
     else \
