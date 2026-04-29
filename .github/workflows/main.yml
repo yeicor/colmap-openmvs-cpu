@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         variant: [cpu, cuda]
-        arch: [amd64, arm64, arm32, x86]
+        arch: [amd64, arm64, arm32]
         include:
           # Native runners
           - arch: amd64
@@ -51,9 +51,6 @@ jobs:
           - arch: arm32
             runner: ubuntu-24.04-arm
             platform: linux/arm/v7
-          - arch: x86
-            runner: ubuntu-24.04
-            platform: linux/386
           # Variants
           - variant: cpu
             BASE_IMAGE: mirror.gcr.io/library/ubuntu:24.04
@@ -153,7 +150,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64, arm32, x86]
+        arch: [amd64, arm64, arm32]
         include:
           # Native runners
           - arch: amd64
@@ -162,8 +159,6 @@ jobs:
             runner: ubuntu-24.04-arm
           - arch: arm32
             runner: ubuntu-24.04-arm
-          - arch: x86
-            runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Set up QEMU
@@ -215,7 +210,7 @@ jobs:
         run: |
           for variant in cpu cuda; do
             # Push individual architecture images. Needed for multi-arch manifest to work.
-            for arch in amd64 arm64 arm32 x86; do
+            for arch in amd64 arm64 arm32; do
               docker push ${{ needs.meta.outputs.image }}:${variant}-${arch}-${{ needs.meta.outputs.tag }}
             done
 
@@ -223,8 +218,7 @@ jobs:
             docker manifest create ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }} \
               --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} \
               --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-x86-${{ needs.meta.outputs.tag }}
+              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }}
 
             # Push multi-arch manifest
             docker manifest push ${{ needs.meta.outputs.image }}:${variant}-${{ needs.meta.outputs.tag }}
@@ -233,8 +227,7 @@ jobs:
             docker manifest create ${{ needs.meta.outputs.image }}:${variant}-latest \
               --amend ${{ needs.meta.outputs.image }}:${variant}-amd64-${{ needs.meta.outputs.tag }} \
               --amend ${{ needs.meta.outputs.image }}:${variant}-arm64-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }} \
-              --amend ${{ needs.meta.outputs.image }}:${variant}-x86-${{ needs.meta.outputs.tag }}
+              --amend ${{ needs.meta.outputs.image }}:${variant}-arm32-${{ needs.meta.outputs.tag }}
             docker manifest push ${{ needs.meta.outputs.image }}:${variant}-latest
           done
 

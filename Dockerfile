@@ -17,6 +17,7 @@ FROM ${BASE_IMAGE} AS builder
 ARG BASE_IMAGE
 ARG CUDA_ARCHITECTURES
 ARG VCPKG_ROOT
+ARG TARGETARCH
 
 WORKDIR /build
 SHELL ["/bin/bash", "-c"]
@@ -58,7 +59,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY vcpkg ${VCPKG_ROOT}
 COPY vcpkg_ports vcpkg_ports
 COPY vcpkg_triplets vcpkg_triplets
-RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
+RUN cd ${VCPKG_ROOT} && \
+    if [ "${TARGETARCH}" = "arm" ]; then \
+        # On arm64 runners, arm/v7 containers run via native AArch32 compat mode, so
+        # uname -m returns "aarch64". vcpkg bootstrap would then download the arm64 binary,
+        # which cannot execute in the arm32 userspace. Inject a uname wrapper that returns
+        # "armv7l" so bootstrap falls through to source compilation (no arm32 binary exists).
+        mkdir -p /tmp/uname-arm && \
+        printf '#!/bin/sh\n[ "$1" = "-m" ] && echo armv7l || exec /usr/bin/uname "$@"\n' \
+            > /tmp/uname-arm/uname && \
+        chmod +x /tmp/uname-arm/uname && \
+        PATH=/tmp/uname-arm:$PATH ./bootstrap-vcpkg.sh -disableMetrics && \
+        rm -rf /tmp/uname-arm; \
+    else \
+        ./bootstrap-vcpkg.sh -disableMetrics; \
+    fi && rm -rf .git
 
 ###############################################################################
 # Build COLMAP
@@ -67,10 +82,10 @@ COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/;s/armv[0-9].*/arm/;s/i[3-6]86/x86/')-linux-release"; \
+    TRIPLET="$(echo "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" | sed 's/amd64/x64/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
-    if [ "$(uname -m)" = "aarch64" ]; then \
+    if [ "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" != "amd64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
     mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE}; \
@@ -122,7 +137,7 @@ COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/;s/armv[0-9].*/arm/;s/i[3-6]86/x86/')-linux-release"; \
+    TRIPLET="$(echo "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" | sed 's/amd64/x64/')-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
