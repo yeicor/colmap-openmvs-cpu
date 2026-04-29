@@ -60,6 +60,38 @@ COPY vcpkg_ports vcpkg_ports
 RUN cd ${VCPKG_ROOT} && ./bootstrap-vcpkg.sh -disableMetrics && rm -rf .git
 
 ###############################################################################
+# Compiler wrapper (auto-detect arch, force compatibility flags)
+###############################################################################
+RUN set -eux; \
+    mkdir -p /opt/compiler-wrappers; \
+    ARCH_FLAG="$(uname -m)"; \
+    case "$ARCH_FLAG" in \
+        x86_64) EXTRA_FLAGS="-march=x86-64 -mtune=generic" ;; \
+        aarch64) EXTRA_FLAGS="-march=armv8-a -mtune=generic" ;; \
+        *) echo "Unsupported architecture: $ARCH_FLAG" >&2; exit 1 ;; \
+    esac; \
+    install -d /opt/compiler-wrappers; \
+    make_wrapper () { \
+        f="/opt/compiler-wrappers/$1"; \
+        real="$2"; \
+        printf '%s\n' \
+        '#!/bin/bash' \
+        'for arg in "$@"; do' \
+        '  case "$arg" in' \
+        '    *openblas*) command -p __REAL__ "$@" ;; # See custom port' \
+        '  esac' \
+        'done' \
+        'command -p __REAL__ "$@" '"$EXTRA_FLAGS"'' \
+        | sed "s/__REAL__/$real/g" > "$f"; \
+        chmod +x "$f"; \
+    }; \
+    make_wrapper cc gcc; \
+    make_wrapper c++ g++; \
+    make_wrapper gfortran gfortran
+
+    ENV PATH=/opt/compiler-wrappers:$PATH
+
+###############################################################################
 # Build COLMAP
 ###############################################################################
 COPY colmap colmap
