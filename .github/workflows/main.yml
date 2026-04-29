@@ -63,27 +63,25 @@ jobs:
             BASE_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-devel-ubuntu24.04
             RUNTIME_IMAGE: mirror.gcr.io/nvidia/cuda:13.2.1-runtime-ubuntu24.04
     runs-on: ${{ matrix.runner }}
-    if: matrix.build_type == 'Release' || (matrix.build_type == 'Debug' && github.event_name == 'workflow_dispatch' && github.event.inputs.build_debug == 'true')
     steps:
-      - name: Free Disk Space - Ubuntu Runners
-        uses: endersonmenezes/free-disk-space@v3
-        with:
-          remove_android: true
-          remove_dotnet: true
-          remove_haskell: true
-          remove_tool_cache: true
-          remove_swap: true
-          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
-          remove_packages_one_command: true
-          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+      - name: Check if should run
+        id: check_skip
+        run: |
+          if [[ "${{ matrix.build_type }}" == "Release" ]] || [[ "${{ matrix.build_type }}" == "Debug" && "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.build_debug }}" == "true" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
       - uses: actions/checkout@v6
+        if: steps.check_skip.outputs.should_run == 'true'
         with:
           submodules: recursive
       - name: Set up Buildx
         id: setup-buildx
+        if: steps.check_skip.outputs.should_run == 'true'
         uses: docker/setup-buildx-action@v4
       - name: Download vcpkg cache artifact
-        if: ${{ github.event.inputs.no_cache != 'true' }}
+        if: steps.check_skip.outputs.should_run == 'true' && github.event.inputs.no_cache != 'true'
         uses: yeicor/action-download-artifact@v1.0.1
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
@@ -92,6 +90,7 @@ jobs:
           if_no_artifact_found: ignore
           use_unzip: true
       - name: Docker cache mounts (restore)
+        if: steps.check_skip.outputs.should_run == 'true'
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
@@ -99,6 +98,7 @@ jobs:
           dockerfile: Dockerfile
           skip-extraction: true
       - name: Build
+        if: steps.check_skip.outputs.should_run == 'true'
         timeout-minutes: 240
         run: |
           BUILD_ARGS=""
@@ -124,7 +124,7 @@ jobs:
               --load .
           fi
       - name: Docker cache mounts (extract)
-        if: "!cancelled()"
+        if: steps.check_skip.outputs.should_run == 'true' && !cancelled()
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
@@ -133,9 +133,10 @@ jobs:
         env:
           STATE_POST: "true"
       - name: Disable post docker cache mounts (extract)
+        if: steps.check_skip.outputs.should_run == 'true'
         run: echo "" > Dockerfile
       - name: Upload docker cache mounts
-        if: "!cancelled()"
+        if: steps.check_skip.outputs.should_run == 'true' && !cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: docker-cache-mounts-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}
@@ -144,9 +145,11 @@ jobs:
             !cache-mounts/**/*:*
           retention-days: 7
       - name: Save some disk space
+        if: steps.check_skip.outputs.should_run == 'true'
         run: |
           rm -rf cache-mounts
       - name: Save built image as artifact
+        if: steps.check_skip.outputs.should_run == 'true'
         run: |
           IMAGE_SUFFIX=""
           if [ "${{ matrix.build_type }}" = "Debug" ]; then
@@ -154,6 +157,7 @@ jobs:
           fi
           docker save ${{ needs.meta.outputs.image }}:${{ matrix.variant }}${IMAGE_SUFFIX}-${{ matrix.arch }}-${{ needs.meta.outputs.tag }} -o docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}.tar
       - name: Upload built image as artifact
+        if: steps.check_skip.outputs.should_run == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: docker-image-${{ matrix.variant }}-${{ matrix.arch }}-${{ matrix.build_type }}-${{ needs.meta.outputs.tag }}
