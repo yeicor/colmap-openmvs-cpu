@@ -78,16 +78,16 @@ RUN set -eux; \
         '#!/bin/bash' \
         'for arg in "$@"; do' \
         '  case "$arg" in' \
-        '    *openblas*) command -p __REAL__ "$@" ;; # See custom port' \
+        '    *openblas*) exec __REAL__ "$@" ;; # See custom port' \
         '  esac' \
         'done' \
-        'command -p __REAL__ "$@" '"$EXTRA_FLAGS"'' \
-        | sed "s/__REAL__/$real/g" > "$f"; \
+        'exec __REAL__ "$@" '"$EXTRA_FLAGS"'' \
+        | sed "s|__REAL__|$real|g" > "$f"; \
         chmod +x "$f"; \
     }; \
-    make_wrapper cc gcc; \
-    make_wrapper c++ g++; \
-    make_wrapper gfortran gfortran
+    make_wrapper cc $(command -v cc); \
+    make_wrapper c++ $(command -v c++); \
+    make_wrapper gfortran $(command -v gfortran)
 
     ENV PATH=/opt/compiler-wrappers:$PATH
 
