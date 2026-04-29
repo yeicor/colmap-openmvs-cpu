@@ -82,10 +82,11 @@ COPY colmap colmap
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/colmap/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(echo "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" | sed 's/amd64/x64/')-linux-release"; \
+    ARCH_VCPKG="$(echo "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" | sed 's/amd64/x64/')"; \
+    TRIPLET="${ARCH_VCPKG}-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
-    if [ "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" != "amd64" ]; then \
+    if [ "${ARCH_VCPKG}" != "x64" ]; then \
         export COLMAP_CMAKE_CONFIGURE_OPTIONS="-DONNX_ENABLED=OFF"; \
     fi; \
     mkdir -p ${VCPKG_DEFAULT_BINARY_CACHE}; \
@@ -137,7 +138,8 @@ COPY openMVS openMVS
 RUN --mount=type=cache,target=/opt/vcpkg/cache,sharing=locked \
     --mount=type=cache,target=/build/openMVS/mybuild,sharing=locked \
     set -Eeuo pipefail; \
-    TRIPLET="$(echo "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" | sed 's/amd64/x64/')-linux-release"; \
+    ARCH_VCPKG="$(echo "${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[0-9].*/arm/')}" | sed 's/amd64/x64/')"; \
+    TRIPLET="${ARCH_VCPKG}-linux-release"; \
     export VCPKG_OVERLAY_PORTS=$(pwd)/vcpkg_ports; \
     export VCPKG_OVERLAY_TRIPLETS=$(pwd)/vcpkg_triplets; \
     rm -r "/build/openMVS/mybuild/vcpkg_installed/$TRIPLET/tools/pkgconf" || true; \
